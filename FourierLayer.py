@@ -20,7 +20,8 @@ class FourierLayer(tf.keras.layers.Layer):
 
         Parameters
         ----------
-        
+        s_init: 
+                
         Returns
         -------
         
