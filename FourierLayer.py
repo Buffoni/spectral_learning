@@ -81,7 +81,7 @@ class FourierLayer(tf.keras.layers.Layer):
             self.nonlinear = None
             self.last = False
 
-    def __call__(self, data, training=False):
+    def call(self, data, training=False):
         layer = tf.math.add(tf.math.multiply(self.base, self.base_mask), self.eye)
         diag = tf.math.add(tf.math.multiply(self.trainable_diag, self.trainable_diag_mask), self.untrainable_diag)
         x = tf.linalg.matmul(tf.math.subtract(2 * self.eye, layer), tf.transpose(data))
