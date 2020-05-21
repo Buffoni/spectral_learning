@@ -106,6 +106,7 @@ if __name__ == '__main__':
     import numpy as np
     import tensorflow as tf
 
-    mylayer = FourierLayer(784, 884, 784, 100, 884, activation='softmax')
-    test_tensor = tf.constant(np.ones((1, 884)), dtype=tf.float32)
-    out = mylayer(np.transpose(test_tensor))
+    mylayer = FourierLayer(784,794,784,10,794,activation='softmax')
+    test_tensor = tf.constant(np.ones((1, 794)), dtype=tf.float32)
+    out = mylayer(test_tensor)
+    print(out.shape)
