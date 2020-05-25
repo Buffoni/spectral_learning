@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Implementation of a simple Fourier NN layer that can learn eigenvalues
+Implementation of a simple Spectral NN layer that can learn eigenvalues
 and eigenvectors of the associated adjacency matrix.
 
 @authors: Lorenzo Buffoni, Lorenzo Giambagli
@@ -11,20 +11,22 @@ import numpy as np
 import tensorflow as tf
 
 
-class FourierLayer(tf.keras.layers.Layer):
+class SpectralLayer(tf.keras.layers.Layer):
     def __init__(self, s_init, s_final, layer_dim, next_layer_dim, dim,
                  activation=None, is_base_trainable=True, is_diag_trainable=True):
-        super(FourierLayer, self).__init__()
+        super(SpectralLayer, self).__init__()
         """Instantiate the eigenvalues and eigenvectors matrices using the proper dimensions.
         Also builds the appropriate masks to stop backpropagation in undesired regions.
-
         Parameters
         ----------
-        s_init: 
-                
-        Returns
-        -------
-        
+        s_init: (int) initial idex of the eigenvector block
+        s_final: (int) final index of the eigenvector block
+        layer_dim: (int) dimension of current block
+        next_layer_dim: (int) dimension of next block
+        dim: (int) total dimension of the network space
+        activation: (string) nonlinear activation function either: "sigmoid", "tanh", "relu" or "softmax"
+        is_base_trainable: (bool) train eigenvectors
+        is_diag_trainable: (bool) train eigenvalues
         """
         self.final_shape = next_layer_dim
         # construct the indented base (random blocks + diagonal)
@@ -82,9 +84,18 @@ class FourierLayer(tf.keras.layers.Layer):
             self.last = False
 
     def call(self, data, training=False):
+        """Performs the spectral layer operation.
+        Parameters
+        ----------
+        data: (float) input data or output from a previous layer
+                
+        Returns
+        -------
+        x: (tf.float32) output of a single spectral layer
+        """
         layer = tf.math.add(tf.math.multiply(self.base, self.base_mask), self.eye)
         diag = tf.math.add(tf.math.multiply(self.trainable_diag, self.trainable_diag_mask), self.untrainable_diag)
-        x = tf.linalg.matmul(tf.math.subtract(2 * self.eye, layer), tf.transpose(data))
+        x = tf.linalg.matmul(tf.math.subtract(2 * self.eye, layer), tf.transpose(data)) #2*I-layer is the analytical inverse of layer
         x = tf.linalg.matmul(diag, x)
         x = tf.linalg.matmul(layer, x)
 
@@ -106,7 +117,8 @@ if __name__ == '__main__':
     import numpy as np
     import tensorflow as tf
 
-    mylayer = FourierLayer(784,794,784,10,794,activation='softmax')
+    mylayer = SpectralLayer(784,794,784,10,794,activation='softmax')
     test_tensor = tf.constant(np.ones((1, 794)), dtype=tf.float32)
     out = mylayer(test_tensor)
-    print(out.shape)
+    print("If test succeds output shape should be: (1, 10)")
+    print("Output shape: ",out.shape)
