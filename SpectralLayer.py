@@ -41,10 +41,9 @@ class SpectralLayer(tf.keras.layers.Layer):
             self.base = tf.constant(bases, dtype=tf.float32)
         self.eye = tf.constant(np.identity(dim), dtype=tf.float32)
 
-        # construct the diagonal eigenvalues matrix (initialized to one)
+        # construct the diagonal eigenvalues matrix (random initialized)
         diags = np.identity(dim)
         masks = np.zeros([dim, dim])
-        # masks[s_init:s_final,s_init:s_final] = np.diag(np.ones((next_layer_dim,)))
         masks[s_init:s_final, s_init:s_final] = np.diag(
             np.random.uniform(-1.8, 1.8, (next_layer_dim,)))
         diags = diags - masks
@@ -100,7 +99,7 @@ class SpectralLayer(tf.keras.layers.Layer):
         x = tf.linalg.matmul(layer, x)
 
         if self.nonlinear is not None:
-            temp = self.nonlinear(x)
+            temp = tf.transpose(self.nonlinear(tf.transpose(x)))
         else:
             temp = x
 
@@ -118,7 +117,7 @@ if __name__ == '__main__':
     import tensorflow as tf
 
     mylayer = SpectralLayer(784,794,784,10,794,activation='softmax')
-    test_tensor = tf.constant(np.ones((1, 794)), dtype=tf.float32)
+    test_tensor = tf.constant(np.ones((2, 794)), dtype=tf.float32)
     out = mylayer(test_tensor)
-    print("If test succeds output shape should be: (1, 10)")
+    print("If test succeds output shape should be: (2, 10)")
     print("Output shape: ",out.shape)
