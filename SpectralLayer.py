@@ -19,14 +19,14 @@ class SpectralLayer(tf.keras.layers.Layer):
         Also builds the appropriate masks to stop backpropagation in undesired regions.
         Parameters
         ----------
-        s_init: (int) initial idex of the eigenvector block
-        s_final: (int) final index of the eigenvector block
-        layer_dim: (int) dimension of current block
-        next_layer_dim: (int) dimension of next block
-        dim: (int) total dimension of the network space
-        activation: (string) nonlinear activation function either: "sigmoid", "tanh", "relu" or "softmax"
-        is_base_trainable: (bool) train eigenvectors
-        is_diag_trainable: (bool) train eigenvalues
+        :param s_init: (int) initial idex of the eigenvector block
+        :param s_final: (int) final index of the eigenvector block
+        :param layer_dim: (int) dimension of current block
+        :param next_layer_dim: (int) dimension of next block
+        :param dim: (int) total dimension of the network space
+        :param activation: (string) nonlinear activation function either: "sigmoid", "tanh", "relu" or "softmax"
+        :param is_base_trainable: (bool) train eigenvectors
+        :param is_diag_trainable: (bool) train eigenvalues
         """
         self.final_shape = next_layer_dim
         # construct the indented base (random blocks + diagonal)
@@ -86,15 +86,16 @@ class SpectralLayer(tf.keras.layers.Layer):
         """Performs the spectral layer operation.
         Parameters
         ----------
-        data: (float) input data or output from a previous layer
-                
+        :param data: (float) input data or output from a previous layer
+        :param training: (bool) default False for Keras use
+
         Returns
         -------
-        x: (tf.float32) output of a single spectral layer
+        :return x: (tf.float32) output of a single spectral layer
         """
         layer = tf.math.add(tf.math.multiply(self.base, self.base_mask), self.eye)
         diag = tf.math.add(tf.math.multiply(self.trainable_diag, self.trainable_diag_mask), self.untrainable_diag)
-        x = tf.linalg.matmul(tf.math.subtract(2 * self.eye, layer), tf.transpose(data)) #2*I-layer is the analytical inverse of layer
+        x = tf.linalg.matmul(tf.math.subtract(2 * self.eye, layer), tf.transpose(data))  # 2*I-layer is the analytical inverse of layer
         x = tf.linalg.matmul(diag, x)
         x = tf.linalg.matmul(layer, x)
 
@@ -116,8 +117,8 @@ if __name__ == '__main__':
     import numpy as np
     import tensorflow as tf
 
-    mylayer = SpectralLayer(784,794,784,10,794,activation='softmax')
+    mylayer = SpectralLayer(784, 794, 784, 10, 794, activation='softmax')
     test_tensor = tf.constant(np.ones((2, 794)), dtype=tf.float32)
     out = mylayer(test_tensor)
-    print("If test succeds output shape should be: (2, 10)")
-    print("Output shape: ",out.shape)
+    print("If test succeeds output shape should be: (2, 10)")
+    print("Output shape: ", out.shape)
