@@ -9,73 +9,116 @@ reference: https://arxiv.org/abs/2005.14436
 @authors: Lorenzo Buffoni, Lorenzo Giambagli
 """
 
-import numpy as np
-import tensorflow as tf
+from tensorflow.python.keras.engine.base_layer import Layer
+from tensorflow.python.keras import activations, initializers, regularizers, constraints
+from tensorflow.python.util.tf_export import keras_export
+from tensorflow.python.keras.layers.ops import core as core_ops
+from tensorflow.python.ops.gen_math_ops import mul
 
 
-class SpectralLayer(tf.keras.layers.Layer):
-    def __init__(self, next_layer_dim, activation=None,
-                 is_base_trainable=True, is_diag_trainable=True):
-        super(SpectralLayer, self).__init__()
+@keras_export('keras.layers.Spectral')
+class Spectral(Layer):
+    def __init__(self,
+                 units,
+                 activation=None,
+                 is_base_trainable=True,
+                 is_diag_trainable=True,
+                 use_bias=True,
+                 base_initializer='optimized_uniform',
+                 diag_initializer='optimized_uniform',
+                 bias_initializer='zeros',
+                 base_regularizer=None,
+                 diag_regularizer=None,
+                 bias_regularizer=None,
+                 activity_regularizer=None,
+                 base_constraint=None,
+                 diag_constraint=None,
+                 bias_constraint=None,
+                 **kwargs):
+        super(Spectral, self).__init__(
+            activity_regularizer=activity_regularizer, **kwargs)
 
-        self.final_shape = next_layer_dim
+        self.units = int(units) if not isinstance(units, int) else units
+        self.activation = activations.get(activation)
+
         self.is_base_trainable = is_base_trainable
         self.is_diag_trainable = is_diag_trainable
+        self.use_bias = use_bias
 
-        if activation == 'relu':
-            self.nonlinear = tf.nn.relu
-        elif activation == 'sigmoid':
-            self.nonlinear = tf.math.sigmoid
-        elif activation == 'tanh':
-            self.nonlinear = tf.math.tanh
-        elif activation == 'softmax':
-            self.nonlinear = tf.nn.softmax
+        # 'optimized_uniform' initializers optmized by Buffoni and Giambagli
+        if base_initializer == 'optimized_uniform':
+            self.base_initializer = initializers.RandomUniform(-0.2, 0.2)
         else:
-            self.nonlinear = None
+            self.base_initializer = initializers.get(base_initializer)
+        if diag_initializer == 'optimized_uniform':
+            self.diag_initializer = initializers.RandomUniform(-0.5, 0.5)
+        else:
+            self.diag_initializer = initializers.get(diag_initializer)
+        self.bias_initializer = initializers.get(bias_initializer)
+
+        self.base_regularizer = regularizers.get(base_regularizer)
+        self.diag_regularizer = regularizers.get(diag_regularizer)
+        self.bias_regularizer = regularizers.get(bias_regularizer)
+
+        self.base_constraint = constraints.get(base_constraint)
+        self.diag_constraint = constraints.get(diag_constraint)
+        self.bias_constraint = constraints.get(bias_constraint)
 
     def build(self, input_shape):
-        input_shape = input_shape[1]
-        self.dim = input_shape + self.final_shape
-        self.eye = tf.constant(np.identity(self.dim), dtype=tf.float32)
 
-        # construct the indented base (random block + zero blocks)
-        self.zero_block_1 = tf.constant(np.zeros([input_shape, self.dim]), dtype=tf.float32)
-        self.zero_block_2 = tf.constant(np.zeros([self.final_shape, self.final_shape]), dtype=tf.float32)
-        block = np.random.uniform(-0.2, 0.2, (self.final_shape, input_shape))
-        if self.is_base_trainable:
-            self.block = tf.Variable(block, trainable=True, dtype=tf.float32)
+        # trainable eigenvector elements matrix
+        # \phi_ij
+        self.base = self.add_weight(
+            name='base',
+            shape=(input_shape[-1], self.units),
+            initializer=self.base_initializer,
+            regularizer=self.base_regularizer,
+            constraint=self.base_constraint,
+            dtype=self.dtype,
+            trainable=self.is_base_trainable
+        )
+
+        # trainable eigenvalues
+        # \lambda_i
+        self.diag = self.add_weight(
+            name='diag',
+            shape=(self.units, ),
+            initializer=self.diag_initializer,
+            regularizer=self.diag_regularizer,
+            constraint=self.diag_constraint,
+            dtype=self.dtype,
+            trainable=self.is_diag_trainable
+        )
+
+        # bias
+        if self.use_bias:
+            self.bias = self.add_weight(
+                name='bias',
+                shape=(self.units, ),
+                initializer=self.bias_initializer,
+                regularizer=self.bias_regularizer,
+                constraint=self.bias_constraint,
+                dtype=self.dtype,
+                trainable=True)
         else:
-            self.block = tf.constant(block, dtype=tf.float32)
+            self.bias = None
 
-        # construct the diagonal eigenvalues matrix
-        self.zero_diag = tf.constant(np.zeros([self.final_shape, input_shape]), dtype=tf.float32)
-        block_diag = np.random.uniform(-0.5, 0.5, (1, self.final_shape))
-        if self.is_diag_trainable:
-            self.trainable_diag = tf.Variable(block_diag, trainable=True, dtype=tf.float32)
-        else:
-            self.trainable_diag = tf.constant(block_diag, dtype=tf.float32)
+        self.built = True
 
-    def call(self, data, training=False):
-        # concatenate the trainable blocks with the constant ones
-        data = tf.keras.layers.ZeroPadding1D(padding=(0, self.final_shape))(tf.reshape(data, [-1, data.shape[1], 1]))
-        data = tf.reshape(data, [-1, data.shape[1]])
-        layer = tf.math.add(self.eye, tf.concat([self.zero_block_1, tf.concat([self.block, self.zero_block_2], 1)], 0))
-        eigval = tf.reshape(tf.linalg.diag(self.trainable_diag), [self.final_shape, self.final_shape])
-        diag = tf.math.add(self.eye, tf.concat([self.zero_block_1, tf.concat([self.zero_diag, eigval], 1)], 0))
-        x = tf.linalg.matmul(tf.math.subtract(2 * self.eye, layer), tf.transpose(data))  # 2*I-layer is the analytical inverse of layer
-        x = tf.linalg.matmul(diag, x)
-        x = tf.linalg.matmul(layer, x)
-        x = x[x.shape[0] - self.final_shape:]
-        if self.nonlinear is not None:
-            x = self.nonlinear(tf.transpose(x))
-        return x
+    def call(self, inputs, **kwargs):
+        return core_ops.dense(
+            inputs,
+            mul(self.diag, self.base),
+            self.bias,
+            self.activation,
+            dtype=self._compute_dtype_object)
 
 
 if __name__ == '__main__':
     import numpy as np
     import tensorflow as tf
 
-    mylayer = SpectralLayer(10, activation='softmax')
+    mylayer = Spectral(10, activation='softmax')
     test_tensor = tf.constant(np.ones((2, 794)), dtype=tf.float32)
     out = mylayer(test_tensor)
     print("If test succeeds output shape should be: (2, 10)")
