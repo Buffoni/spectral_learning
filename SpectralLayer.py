@@ -108,7 +108,7 @@ class Spectral(Layer):
     def call(self, inputs, **kwargs):
         return core_ops.dense(
             inputs,
-            mul(self.diag, self.base),
+            - mul(self.diag, self.base),
             self.bias,
             self.activation,
             dtype=self._compute_dtype_object)
