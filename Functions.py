@@ -1,6 +1,7 @@
 """
 Functions used to examine layer's structure after the training and compare the 'Dense' layer and the 'Spectral' one.
 The 'model_config' file contains the structure of the network to be tested.
+The dataset loaded is MNIST
 @authors: Lorenzo Buffoni, Lorenzo Giambagli
 """
 import tensorflow as tf
