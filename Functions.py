@@ -3,7 +3,6 @@ Functions used to examine layer's structure after the training and compare the '
 The 'model_config' file contains the structure of the network to be tested.
 @authors: Lorenzo Buffoni, Lorenzo Giambagli
 """
-
 import tensorflow as tf
 from SpectralLayer import Spectral
 from tensorflow.keras.layers import Dense
@@ -31,7 +30,7 @@ model_config = {
     'last_type': 'spec',
     'last_activ': 'softmax',
     'last_size': 10,
-    'last_diag_portion': '2',
+    'last_regularize': None,
     'last_is_base': True,
     'last_is_diag': True,
     'last_is_bias': False,
@@ -41,7 +40,6 @@ model_config = {
     'epochs': 30
 }
 
-
 def build_feedforward():
     """
     :param config: Configuration file for your model
@@ -50,7 +48,7 @@ def build_feedforward():
     model = tf.keras.Sequential()
     model.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
 
-    for i in range(0, len(model_config['type'])):
+    for i in range(0, len(model_config['size'])):
         if model_config['type'][i] == 'spec':
             model.add(Spectral(model_config['size'][i],
                                is_diag_trainable=model_config['is_diag'][i],
@@ -65,10 +63,11 @@ def build_feedforward():
 
     if model_config['last_type'] == 'spec':
         model.add(Spectral(model_config['last_size'],
-                           is_diag_trainable=model_config['last_is_diag'],
-                           is_base_trainable=model_config['last_is_base'],
-                           is_bias=model_config['last_is_bias'],
-                           activation=model_config['last_activ']))
+                               is_diag_trainable=model_config['last_is_diag'],
+                               is_base_trainable=model_config['last_is_base'],
+                               diag_regularizer=model_config['last_regularize'],
+                               use_bias=model_config['last_is_bias'],
+                               activation=model_config['last_activ']))
     else:
         model.add(Dense(model_config['last_size'],
                         use_bias=model_config['last_is_bias'],
@@ -85,6 +84,9 @@ def train_model(config, load_model=False):
     """
     :return: Opens a file in append mode and write down the Test_accuracy
     """
+    model_config['type'] = config['type']
+    model_config['last_type'] = config['type'][0]
+
     mnist = tf.keras.datasets.mnist
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
@@ -137,9 +139,10 @@ def train_model(config, load_model=False):
 
     model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=config['epochs'])
     model.evaluate(flat_test, y_test, batch_size=1000, verbose=1)
+
     return model
 
-def lambda_trimmer(model, cut_n=60):
+def spectral_eigval_trim(model, cut_n=60):
     """
     :param model: spectral model to Trim
     :param cut_n: numbers of steps between minimum and maximum of the eigenvalues
@@ -151,7 +154,7 @@ def lambda_trimmer(model, cut_n=60):
 
     autov_coll = np.array([])
     for i in range(0, len(model.layers) - 1):
-        autov_coll = np.concatenate((autov_coll, model.layers[i].get_weights()[1].numpy()), axis=0)
+        autov_coll = np.concatenate((autov_coll, model.layers[i].get_weights()[1]), axis=0)
     eig_n = len(autov_coll)
     print(eig_n)
 
@@ -179,12 +182,11 @@ def lambda_trimmer(model, cut_n=60):
         acc_final.append(tested[1])
         eig_ratio.append(useful_eig / eig_n)
 
-    return np.array(acc_final), np.array(eig_ratio)
+    return np.array(eig_ratio), np.array(acc_final)
 
-
-def connectivity_trimmer(model, cut_n=60):
+def dense_connectivity_trim(model, cut_n=60):
     """
-    :param model: dense model to Trim
+    :param model: Dense model to Trim using incoming connectivity
     :param flat_test: testset elements
     :param y_test: testset labels
     :param cut_n: numbers of steps between minimum and maximum of the eigenvalues
@@ -227,16 +229,17 @@ def connectivity_trimmer(model, cut_n=60):
         acc_final.append(tested[1])
         nodes_ratio.append(nonzero / nodes_n)
 
-    return np.array(acc_final), np.array(nodes_ratio)
+    return np.array(nodes_ratio), np.array(acc_final)
 
-def dense_equiv_trimmer(model, cut_n=60):
+def spectral_connectivity_trim(model, cut_n=60):
     dense_eq = tf.keras.Sequential()
     dense_eq.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
+
     for i in range(0, len(model.layers) - 1):
-        dense_eq.add(tf.keras.layers.Dense(model_config['size'][i], use_bias=model_config['is_bias'][i],
+        dense_eq.add(Dense(model_config['size'][i], use_bias=model_config['is_bias'][i],
                                            activation=model_config['activ'][i]))
 
-    dense_eq.add(tf.keras.layers.Dense(model_config['last_size'], use_bias=model_config['last_is_bias'],
+    dense_eq.add(Dense(model_config['last_size'], use_bias=model_config['last_is_bias'],
                                        activation=model_config['last_activ']))
 
     opt = tf.keras.optimizers.Adam(learning_rate=0.001)
@@ -245,76 +248,11 @@ def dense_equiv_trimmer(model, cut_n=60):
                      loss='sparse_categorical_crossentropy',
                      metrics=['accuracy'], run_eagerly=False)
 
-    for i in range(0, len(dense_eq.layers)):
-        diag = np.diagflat(model.layers[i].get_weights()[1])
+    for i in range(0, len(model.layers)): #Spectral layers
+        print(i)
+        diag = model.layers[i].get_weights()[1]
         base = model.layers[i].get_weights()[0]
         w = - mult(base, diag)
         dense_eq.layers[i].set_weights([w])
 
-    return connectivity_trimmer(dense_eq)
-
-
-def phi_and_lambda(config):
-    import pickle as pk
-    f = open(r'C:\Users\loren\PycharmProjects\Trimming\base.p', "wb")
-    model_config['is_base'] = [True]
-    model_config['diag_portion'] = ['no']
-    trained_model = train_model(config, load_model=False)
-    model_config['is_base'] = [False]
-    model_config['diag_portion'] = ['2']
-    bases = []
-    for l in range(0, len(trained_model.layers)):
-        bases.append(trained_model.layers[l].base.numpy())
-    pk.dump(bases, f)
-    f.close()
-
-    o = open(r'C:\Users\loren\PycharmProjects\Trimming\diags.p', "wb")
-    diagon = []
-    for l in range(0, len(trained_model.layers)):
-        diagon.append(trained_model.layers[l].eigval_2.numpy())
-
-    pk.dump(diagon, o)
-    o.close()
-    print('Retrain\n')
-    trained2_model = train_model(config, load_model=True)
-    FL = open(r'C:\Users\loren\PycharmProjects\Trimming\Risultati.p', "ab")
-    return lambda_trimmer(trained2_model)
-    # to_dump = [ris_trim1, ris_trim2]
-    # pk.dump(to_dump, FL)
-    # FL.close()
-    # print('\nTrimmed!\n')
-
-
-
-
-
-def simultaneus_train(config):
-    import pickle as pk
-
-    model_config['type'] = ['spec']
-    model_config['last_type'] = 'spec'
-
-    spec_full = train_model(config)
-    spec_copy = spec_full
-
-    g = open(r'C:\Users\loren\PycharmProjects\Trimming\Data\Spec_connectiv.p', "ab")
-    print('Layer Spectral, Trim Connectivity\n')
-    acc1, ratio1 = dense_equiv_trimmer(spec_full)
-    ris1 = [acc1, ratio1]
-    pk.dump(ris1, g)
-
-    f = open(r'C:\Users\loren\PycharmProjects\Trimming\Data\Simultaneus_spec.p', "ab")
-    print('Layer Spectral, Trim Lambda\n')
-    acc, ratio = lambda_trimmer(spec_copy)
-    ris = [acc, ratio]
-    pk.dump(ris, f)
-
-    model_config['type'] = ['dense']
-    model_config['last_type'] = 'dense'
-    dense = train_model(config)
-    f = open(r'C:\Users\loren\PycharmProjects\Trimming\Data\Connectivity.p', "ab")
-    print('Layer Dense, Trim Connectivity\n')
-    acc, ratio = connectivity_trimmer(dense)
-    ris = [acc, ratio]
-    pk.dump(ris, f)
-    return None
+    return dense_connectivity_trim(dense_eq)
