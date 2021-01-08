@@ -3,6 +3,7 @@ Functions used to examine layer's structure after the training and compare the '
 The 'model_config' file contains the structure of the network to be tested.
 @authors: Lorenzo Buffoni, Lorenzo Giambagli
 """
+
 import tensorflow as tf
 from SpectralLayer import Spectral
 from tensorflow.keras.layers import Dense
@@ -228,6 +229,30 @@ def connectivity_trimmer(model, cut_n=60):
 
     return np.array(acc_final), np.array(nodes_ratio)
 
+def dense_equiv_trimmer(model, cut_n=60):
+    dense_eq = tf.keras.Sequential()
+    dense_eq.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
+    for i in range(0, len(model.layers) - 1):
+        dense_eq.add(tf.keras.layers.Dense(model_config['size'][i], use_bias=model_config['is_bias'][i],
+                                           activation=model_config['activ'][i]))
+
+    dense_eq.add(tf.keras.layers.Dense(model_config['last_size'], use_bias=model_config['last_is_bias'],
+                                       activation=model_config['last_activ']))
+
+    opt = tf.keras.optimizers.Adam(learning_rate=0.001)
+
+    dense_eq.compile(optimizer=opt,
+                     loss='sparse_categorical_crossentropy',
+                     metrics=['accuracy'], run_eagerly=False)
+
+    for i in range(0, len(dense_eq.layers)):
+        diag = np.diagflat(model.layers[i].get_weights()[1])
+        base = model.layers[i].get_weights()[0]
+        w = - mult(base, diag)
+        dense_eq.layers[i].set_weights([w])
+
+    return connectivity_trimmer(dense_eq)
+
 
 def phi_and_lambda(config):
     import pickle as pk
@@ -260,29 +285,7 @@ def phi_and_lambda(config):
     # print('\nTrimmed!\n')
 
 
-def dense_equiv_trimmer(model, cut_n=60):
-    dense_eq = tf.keras.Sequential()
-    dense_eq.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
-    for i in range(0, len(model.layers) - 1):
-        dense_eq.add(tf.keras.layers.Dense(model_config['size'][i], use_bias=model_config['is_bias'][i],
-                                           activation=model_config['activ'][i]))
 
-    dense_eq.add(tf.keras.layers.Dense(model_config['last_size'], use_bias=model_config['last_is_bias'],
-                                       activation=model_config['last_activ']))
-
-    opt = tf.keras.optimizers.Adam(learning_rate=0.001)
-
-    dense_eq.compile(optimizer=opt,
-                     loss='sparse_categorical_crossentropy',
-                     metrics=['accuracy'], run_eagerly=False)
-
-    for i in range(0, len(dense_eq.layers)):
-        diag_2 = np.diagflat(model.layers[i].eigval_2.numpy())
-        base = model.layers[i].base.numpy()
-        w = - diag_2 @ base
-        dense_eq.layers[i].set_weights([w.T])
-
-    return connectivity_trimmer(dense_eq)
 
 
 def simultaneus_train(config):
