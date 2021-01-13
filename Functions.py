@@ -19,26 +19,25 @@ tf.config.experimental.set_synchronous_execution(False)
 
 model_config = {
     'input_shape': 784,
-    'type': ['spec'],  # Types of hidden layers: 'spec' = Spectral Layer, second diag trainable, 'dense' = Dense layer
-    'size': [2000],  # Size of every hidden layer
-    'is_base': [True],  # True means a trainable basis, False ow
-    'is_diag': [True],  # True means a trainable eigenvalues, False ow
-    'regularize': [None],
-    'is_bias': [False],  # True means a trainable bias, False ow
-    'activ': ['tanh'],  # Activation function
+    'type': ['spec'],    # Types of hidden layers: 'spec' = Spectral Layer, second diag trainable, 'dense' = Dense layer
+    'size': [2000, 2000],      # Size of every hidden layer
+    'is_base': [True, True],   # True means a trainable basis, False ow
+    'is_diag': [True, True],   # True means a trainable eigenvalues, False ow
+    'regularize': [None, None],
+    'is_bias': [False, False],  # True means a trainable bias, False ow
+    'activ': ['tanh', 'tanh'],   # Activation function
 
     # Same parameters but for the last layer
     'last_type': 'spec',
     'last_activ': 'softmax',
     'last_size': 10,
-    'last_regularize': None,
     'last_is_base': True,
     'last_is_diag': True,
     'last_is_bias': False,
 
     # Training Parameters
     'batch_size': 800,
-    'epochs': 30
+    'epochs': 20
 }
 
 def build_feedforward():
@@ -60,13 +59,13 @@ def build_feedforward():
         else:
             model.add(Dense(model_config['size'][i],
                             use_bias=model_config['is_bias'][i],
+                            kernel_regularizer=model_config['regularize'][i],
                             activation=model_config['activ'][i]))
 
     if model_config['last_type'] == 'spec':
         model.add(Spectral(model_config['last_size'],
                                is_diag_trainable=model_config['last_is_diag'],
                                is_base_trainable=model_config['last_is_base'],
-                               diag_regularizer=model_config['last_regularize'],
                                use_bias=model_config['last_is_bias'],
                                activation=model_config['last_activ']))
     else:
@@ -81,12 +80,13 @@ def build_feedforward():
                   metrics=['accuracy'], run_eagerly=False)
     return model
 
-def train_model(config, load_model=False):
+def train_model(config=None, load_model=False):
     """
+    Train a configurated model according to model_config
     :return: Opens a file in append mode and write down the Test_accuracy
     """
-    model_config['type'] = config['type']
-    model_config['last_type'] = config['type'][0]
+    if config is not None:
+        model_config = config
 
     mnist = tf.keras.datasets.mnist
 
@@ -138,46 +138,50 @@ def train_model(config, load_model=False):
                       loss='sparse_categorical_crossentropy',
                       metrics=['accuracy'], run_eagerly=False)
 
-    model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=config['epochs'])
-    model.evaluate(flat_test, y_test, batch_size=1000, verbose=1)
+    model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
+    model.evaluate(flat_test, y_test, batch_size=1000, verbose=0)
 
     return model
 
-def spectral_eigval_trim(model, cut_n=60):
+def spectral_eigval_trim(model, cut_n=80):
     """
     :param model: spectral model to Trim
     :param cut_n: numbers of steps between minimum and maximum of the eigenvalues
     :return: accuracy per cut and ratio between eigenvalues used and the total number of eigenvalues
     """
+
     f = open('testset.pickle', 'rb')
     flat_test, y_test = pk.load(f)
     f.close()
 
-    autov_coll = np.array([])
-    for i in range(0, len(model.layers) - 1):
-        autov_coll = np.concatenate((autov_coll, model.layers[i].get_weights()[1]), axis=0)
-    eig_n = len(autov_coll)
-    print(eig_n)
+    cut_min = np.zeros([len(model.layers) - 1])
+    cut_max = np.zeros([len(model.layers) - 1])
+    cut = []
+    eig_n = np.array(model_config['size']).sum() / 2
 
-    cut_min = abs(autov_coll).min()
-    cut_max = abs(autov_coll).max()
-    cut_step = (cut_max - cut_min) / cut_n
-    cut = np.arange(cut_min, cut_max, cut_step).tolist()
+    for i in range(0, len(model.layers) - 1):
+        cut_max[i] = abs(model.layers[i].get_weights()[1]).max()
+        cut_min[i] = abs(model.layers[i].get_weights()[1]).min()
+        cut_step = (cut_max[i] - cut_min[i]) / cut_n
+        cut.append(np.arange(cut_min[i], cut_max[i], cut_step).tolist())
 
     eig_ratio = []
     acc_final = []
-    for c in cut:
+
+    for j in range(0, cut_n):
         useful_eig = 0
-        for j in range(0, len(model.layers) - 1):
-            diag_out = model.layers[j].get_weights()[1]
-            diag_out[abs(diag_out) < c] = 0
-            set_value(model.layers[j].diag, tf.constant(diag_out, dtype=tf.float32))
+        for i in range(0, len(model.layers) - 1):
+        # for i in range(0, len(model.layers) - 2):
+            diag_out = model.layers[i].get_weights()[1]
+            diag_out[abs(diag_out) < cut[i][j]] = 0
+            set_value(model.layers[i].diag, tf.constant(diag_out, dtype=tf.float32))
             useful_eig = useful_eig + np.count_nonzero(diag_out != 0)
+
 
         model.compile(optimizer=model.optimizer,
                       loss=model.loss,
                       metrics=['accuracy'],
-                      run_eagerly=False)
+                      run_eagerly=True)
 
         tested = model.evaluate(flat_test, y_test, batch_size=1000, verbose=0)
         acc_final.append(tested[1])
@@ -185,7 +189,7 @@ def spectral_eigval_trim(model, cut_n=60):
 
     return np.array(eig_ratio), np.array(acc_final)
 
-def dense_connectivity_trim(model, cut_n=60):
+def dense_connectivity_trim(model, cut_n=80):
     """
     :param model: Dense model to Trim using incoming connectivity
     :param flat_test: testset elements
@@ -196,43 +200,51 @@ def dense_connectivity_trim(model, cut_n=60):
     f = open('testset.pickle', 'rb')
     flat_test, y_test = pk.load(f)
     f.close()
-    connect_coll = np.array([])
 
+    nodes_n = np.array(model_config['size']).sum() /2
+
+    cut_min = np.zeros([len(model.layers) - 1])
+    cut_max = np.zeros([len(model.layers) - 1])
+    cut = []
+
+    #Range of the connectivity
     for i in range(0, len(model.layers) - 1):
         pesi = model.layers[i].get_weights()[0]
-        pesi = pesi.T
-        connectivity = np.sum(pesi, axis=1)
-        connect_coll = np.concatenate((connect_coll, connectivity), axis=0)
+        connectivity = np.sum(pesi, axis=0)
+        cut_max[i] = abs(connectivity).max()
+        cut_min[i] = abs(connectivity).min()
 
-    nodes_n = len(connect_coll)
-    print(nodes_n)
-    cut_min = abs(connect_coll).min()
-    cut_max = abs(connect_coll).max()
-    cut_step = (cut_max - cut_min) / cut_n
-    cut = np.arange(cut_min, cut_max, cut_step).tolist()
+        cut_step = (cut_max[i] - cut_min[i]) / cut_n
+        cut.append(np.arange(cut_min[i], cut_max[i], cut_step).tolist())
+
     nodes_ratio = []
     acc_final = []
 
-    for c in cut:
+    for j in range(0, cut_n):
         nonzero = 0
-        for j in range(0, len(model.layers) - 1):
-            pesi = model.layers[j].get_weights()[0]
+        # for i in range(0, len(model.layers) - 1):
+        for i in range(0, len(model.layers) - 2):
+            pesi = model.layers[i].get_weights()[0]
             pesi = pesi.T
             connectivity = np.sum(pesi, axis=1)
-            filtro = abs(connectivity) > c
+            filtro = abs(connectivity) > cut[i][j]
             filtro.astype(np.int)
             new = pesi.T * filtro
-            model.layers[j].set_weights([new])
+            model.layers[i].set_weights([new])
             nonzero = nonzero + filtro.sum()
 
-        model.compile(optimizer=model.optimizer, loss=model.loss, metrics=['accuracy'], run_eagerly=False)
+        model.compile(optimizer=model.optimizer,
+                      loss=model.loss,
+                      metrics=['accuracy'],
+                      run_eagerly=False)
+
         tested = model.evaluate(flat_test, y_test, batch_size=1000, verbose=0)
         acc_final.append(tested[1])
         nodes_ratio.append(nonzero / nodes_n)
 
     return np.array(nodes_ratio), np.array(acc_final)
 
-def spectral_connectivity_trim(model, cut_n=60):
+def spectral_connectivity_trim(model):
     dense_eq = tf.keras.Sequential()
     dense_eq.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
 
@@ -250,10 +262,10 @@ def spectral_connectivity_trim(model, cut_n=60):
                      metrics=['accuracy'], run_eagerly=False)
 
     for i in range(0, len(model.layers)): #Spectral layers
-        print(i)
         diag = model.layers[i].get_weights()[1]
         base = model.layers[i].get_weights()[0]
         w = - mult(base, diag)
         dense_eq.layers[i].set_weights([w])
 
     return dense_connectivity_trim(dense_eq)
+
