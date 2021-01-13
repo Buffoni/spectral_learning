@@ -14,7 +14,7 @@ model_config = {
     'is_diag': [True],  # True means a trainable eigenvalues, False ow
     'regularize': [None],
     'is_bias': [False],  # True means a trainable bias, False ow
-    'activ': ['tanh'],  # Activation function
+    'activ': ['relu'],  # Activation function
 
     # Same parameters but for the last layer
     'last_type': 'spec',
@@ -30,12 +30,12 @@ model_config = {
 }
 
 plt.figure(0)
-for i in range(2):
+for i in range(5):
     print(f"Trial: {i + 1}\n")
 
     print('Spectral...\n')
     model_config['type'] = ['spec']
-    model_config['last_type'] = 'spec'
+    model_config['last_type'] = ['spec']
     spec_mod = train_model(config=model_config)
     spec_cp = spec_mod
     [conn, acc_conn] = spectral_connectivity_trim(spec_cp)
@@ -43,7 +43,7 @@ for i in range(2):
 
     print('Dense...\n')
     model_config['type'] = ['dense']
-    model_config['last_type'] = 'dense'
+    model_config['last_type'] = ['dense']
     dense_mod = train_model(config=model_config)
     [dense_conn, dense_acc_conn] = dense_connectivity_trim(dense_mod)
 
@@ -54,8 +54,8 @@ for i in range(2):
 handles, labels = plt.gca().get_legend_handles_labels()
 by_label = OrderedDict(zip(labels, handles))
 plt.legend(by_label.values(), by_label.keys())
-plt.title('1 Hidden layer Trimming-tanh')
+plt.title('1 Hidden layer Trimming-relu')
 plt.xlabel('Active Nodes Fraction', fontsize=15)
 plt.ylabel('Test accuracy', fontsize=15)
-plt.savefig("1_Hidden_Layer-tanh.png")
+plt.savefig("1_Hidden_Layer-relu.png")
 plt.show()

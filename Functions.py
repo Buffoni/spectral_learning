@@ -17,28 +17,30 @@ physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 tf.config.experimental.set_synchronous_execution(False)
 
-model_config = {
-    'input_shape': 784,
-    'type': ['spec'],    # Types of hidden layers: 'spec' = Spectral Layer, second diag trainable, 'dense' = Dense layer
-    'size': [2000, 2000],      # Size of every hidden layer
-    'is_base': [True, True],   # True means a trainable basis, False ow
-    'is_diag': [True, True],   # True means a trainable eigenvalues, False ow
-    'regularize': [None, None],
-    'is_bias': [False, False],  # True means a trainable bias, False ow
-    'activ': ['tanh', 'tanh'],   # Activation function
+# model_config = {
+#     'input_shape': 784,
+#     'type': ['spec'],    # Types of hidden layers: 'spec' = Spectral Layer, second diag trainable, 'dense' = Dense layer
+#     'size': [2000, 2000],      # Size of every hidden layer
+#     'is_base': [True, True],   # True means a trainable basis, False ow
+#     'is_diag': [True, True],   # True means a trainable eigenvalues, False ow
+#     'regularize': [None, None],
+#     'is_bias': [False, False],  # True means a trainable bias, False ow
+#     'activ': ['tanh', 'tanh'],   # Activation function
+#
+#     # Same parameters but for the last layer
+#     'last_type': 'spec',
+#     'last_activ': 'softmax',
+#     'last_size': 10,
+#     'last_is_base': True,
+#     'last_is_diag': True,
+#     'last_is_bias': False,
+#
+#     # Training Parameters
+#     'batch_size': 800,
+#     'epochs': 20
+# }
 
-    # Same parameters but for the last layer
-    'last_type': 'spec',
-    'last_activ': 'softmax',
-    'last_size': 10,
-    'last_is_base': True,
-    'last_is_diag': True,
-    'last_is_bias': False,
-
-    # Training Parameters
-    'batch_size': 800,
-    'epochs': 20
-}
+model_config = None
 
 def build_feedforward():
     """
@@ -86,8 +88,8 @@ def train_model(config=None, load_model=False):
     Train a configurated model according to model_config
     :return: Opens a file in append mode and write down the Test_accuracy
     """
-    if config is not None:
-        model_config = config
+    # if config is not None:
+    model_config = config
 
     mnist = tf.keras.datasets.mnist
 
