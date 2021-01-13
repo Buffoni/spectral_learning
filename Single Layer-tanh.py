@@ -28,9 +28,12 @@ model_config = {
     'batch_size': 800,
     'epochs': 20
 }
+
 plt.figure(0)
 for i in range(5):
-    print(f"Trial: {i + 1}")
+    print(f"Trial: {i + 1}\n")
+
+    print('Spectral...\n')
     model_config['type'] = ['spec']
     model_config['last_type'] = ['spec']
     spec_mod = train_model(config=model_config)
@@ -38,6 +41,7 @@ for i in range(5):
     [conn, acc_conn] = spectral_connectivity_trim(spec_cp)
     [eig_lambda, acc_lambda] = spectral_eigval_trim(spec_mod)
 
+    print('Dense...\n')
     model_config['type'] = ['dense']
     model_config['last_type'] = ['dense']
     dense_mod = train_model(config=model_config)
@@ -50,7 +54,7 @@ for i in range(5):
 handles, labels = plt.gca().get_legend_handles_labels()
 by_label = OrderedDict(zip(labels, handles))
 plt.legend(by_label.values(), by_label.keys())
-plt.title('1 Hidden layer Trimming.')
+plt.title('1 Hidden layer Trimming-tanh')
 plt.xlabel('Active Nodes Fraction', fontsize=15)
 plt.ylabel('Test accuracy', fontsize=15)
 plt.savefig("1_Hidden_Layer-tanh.png")

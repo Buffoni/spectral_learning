@@ -45,10 +45,11 @@ def build_feedforward():
     :param config: Configuration file for your model
     :return: Model created according to 'model_config'
     """
+
     model = tf.keras.Sequential()
     model.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
 
-    for i in range(0, len(model_config['size'])):
+    for i in range(0, len(model_config['size'])-1):
         if model_config['type'][i] == 'spec':
             model.add(Spectral(model_config['size'][i],
                                is_diag_trainable=model_config['is_diag'][i],
