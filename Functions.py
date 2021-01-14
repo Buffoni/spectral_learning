@@ -272,3 +272,49 @@ def spectral_connectivity_trim(model):
 
     return dense_connectivity_trim(dense_eq)
 
+def mod_connectivity_trim(model, cut_n=80):
+    f = open('testset.pickle', 'rb')
+    flat_test, y_test = pk.load(f)
+    f.close()
+
+    nodes_n = np.array(model_config['size']).sum() /2
+
+    cut_min = np.zeros([len(model.layers) - 1])
+    cut_max = np.zeros([len(model.layers) - 1])
+    cut = []
+
+    #Range of the connectivity
+    for i in range(0, len(model.layers) - 1):
+        pesi = model.layers[i].get_weights()[0]
+        m_connectivity = np.sum(abs(pesi), axis=0)
+        cut_max[i] = m_connectivity.max()
+        cut_min[i] = m_connectivity.min()
+
+        cut_step = (cut_max[i] - cut_min[i]) / cut_n
+        cut.append(np.arange(cut_min[i], cut_max[i], cut_step).tolist())
+
+    nodes_ratio = []
+    acc_final = []
+
+    for j in range(0, cut_n):
+        nonzero = 0
+        for i in range(0, len(model.layers) - 1):
+            pesi = model.layers[i].get_weights()[0]
+            pesi = pesi.T
+            m_connectivity = np.sum(abs(pesi), axis=1)
+            filtro = m_connectivity > cut[i][j]
+            filtro.astype(np.int)
+            new = pesi.T * filtro
+            model.layers[i].set_weights([new])
+            nonzero = nonzero + filtro.sum()
+
+        model.compile(optimizer=model.optimizer,
+                      loss=model.loss,
+                      metrics=['accuracy'],
+                      run_eagerly=False)
+
+        tested = model.evaluate(flat_test, y_test, batch_size=1000, verbose=0)
+        acc_final.append(tested[1])
+        nodes_ratio.append(nonzero / nodes_n)
+
+    return np.array(nodes_ratio), np.array(acc_final)
