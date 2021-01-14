@@ -35,7 +35,7 @@ for i in range(5):
 
     print('Spectral...\n')
     model_config['type'] = ['spec', 'spec']
-    model_config['last_type'] = ['spec']
+    model_config['last_type'] = 'spec'
     spec_mod = train_model(config=model_config)
     spec_cp = spec_mod
     [conn, acc_conn] = spectral_connectivity_trim(spec_cp)
@@ -43,7 +43,7 @@ for i in range(5):
 
     print('Dense...\n')
     model_config['type'] = ['dense', 'dense']
-    model_config['last_type'] = ['dense']
+    model_config['last_type'] = 'dense'
     dense_mod = train_model(config=model_config)
     [dense_conn, dense_acc_conn] = dense_connectivity_trim(dense_mod)
 
@@ -57,5 +57,5 @@ plt.legend(by_label.values(), by_label.keys())
 plt.title('2 Hidden layer Trimming-relu.')
 plt.xlabel('Active Nodes Fraction', fontsize=15)
 plt.ylabel('Test accuracy', fontsize=15)
-plt.savefig("2_Hidden_Layer-relu.png")
+plt.savefig("Figure/2_Hidden_Layer-relu.png")
 plt.show()

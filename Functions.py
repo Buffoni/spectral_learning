@@ -40,9 +40,8 @@ tf.config.experimental.set_synchronous_execution(False)
 #     'epochs': 20
 # }
 
-model_config = None
-
 def build_feedforward():
+
     """
     :param config: Configuration file for your model
     :return: Model created according to 'model_config'
@@ -51,7 +50,7 @@ def build_feedforward():
     model = tf.keras.Sequential()
     model.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
 
-    for i in range(0, len(model_config['size'])-1):
+    for i in range(0, len(model_config['size'])):
         if model_config['type'][i] == 'spec':
             model.add(Spectral(model_config['size'][i],
                                is_diag_trainable=model_config['is_diag'][i],
@@ -89,6 +88,7 @@ def train_model(config=None, load_model=False):
     :return: Opens a file in append mode and write down the Test_accuracy
     """
     # if config is not None:
+    global model_config
     model_config = config
 
     mnist = tf.keras.datasets.mnist
@@ -225,8 +225,7 @@ def dense_connectivity_trim(model, cut_n=80):
 
     for j in range(0, cut_n):
         nonzero = 0
-        # for i in range(0, len(model.layers) - 1):
-        for i in range(0, len(model.layers) - 2):
+        for i in range(0, len(model.layers) - 1):
             pesi = model.layers[i].get_weights()[0]
             pesi = pesi.T
             connectivity = np.sum(pesi, axis=1)
@@ -265,6 +264,7 @@ def spectral_connectivity_trim(model):
                      metrics=['accuracy'], run_eagerly=False)
 
     for i in range(0, len(model.layers)): #Spectral layers
+        print(i)
         diag = model.layers[i].get_weights()[1]
         base = model.layers[i].get_weights()[0]
         w = - mult(base, diag)

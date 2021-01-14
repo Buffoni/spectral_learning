@@ -30,7 +30,7 @@ model_config = {
 }
 
 plt.figure(0)
-for i in range(2):
+for i in range(5):
     print(f"Trial: {i + 1}\n")
 
     print('Spectral...\n')
@@ -57,5 +57,5 @@ plt.legend(by_label.values(), by_label.keys())
 plt.title('1 Hidden layer Trimming-tanh')
 plt.xlabel('Active Nodes Fraction', fontsize=15)
 plt.ylabel('Test accuracy', fontsize=15)
-plt.savefig("1_Hidden_Layer-tanh.png")
+plt.savefig("Figure/1_Hidden_Layer-tanh.png")
 plt.show()
