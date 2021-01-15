@@ -75,7 +75,7 @@ for counter, dr in enumerate(reg):
     weights = model.layers[2].weights[0].numpy()
     oshape = weights.shape
     weights = weights.reshape(-1)
-    abs_weights = weights.abs()
+    abs_weights = np.abs(weights)
     thresholds = [np.percentile(abs_weights, q=perc) for perc in percentiles]
     for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the weights"):
       weights[abs_weights < t] = 0.0

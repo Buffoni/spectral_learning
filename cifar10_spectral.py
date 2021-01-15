@@ -73,7 +73,7 @@ for counter, dr in enumerate(diag_reg):
     model.fit(x_train, y_train, epochs=best_params["epochs"], batch_size=128, verbose=0)
     print("  {}-th training (of {}) done in {:.3f} secs".format(attempt+1, nattempts, time()-tic))
     diag = model.layers[2].diag.numpy()
-    abs_diag = diag.abs()
+    abs_diag = np.abs(diag)
     thresholds = [np.percentile(abs_diag, q=perc) for perc in percentiles]
     for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the eigenvalues"):
       diag[abs_diag < t] = 0.0
