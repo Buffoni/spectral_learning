@@ -54,7 +54,7 @@ def create_net(nclasses=10, spectral_out=512, diag_reg=0.01, learning_rate=0.001
 
 nattempts = 3
 percentiles = list(range(0, 110, 10))
-diag_reg = [0, 1e-5, 5e-4, 1e-4, 1e-3, 1e-2, 1e-1]
+diag_reg = [0, 1e-5, 5e-4, 1e-4, 1e-3, 1e-2, 1e-1, 1]
 hyperparameters = {"epochs": [25, 50],
                    "lr": [1e-4, 1e-3]}
 
@@ -73,9 +73,10 @@ for counter, dr in enumerate(diag_reg):
     model.fit(x_train, y_train, epochs=best_params["epochs"], batch_size=128, verbose=0)
     print("  {}-th training (of {}) done in {:.3f} secs".format(attempt+1, nattempts, time()-tic))
     diag = model.layers[2].diag.numpy()
-    thresholds = [np.percentile(diag, q=perc) for perc in percentiles]
+    abs_diag = diag.abs()
+    thresholds = [np.percentile(abs_diag, q=perc) for perc in percentiles]
     for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the eigenvalues"):
-      diag[diag < t] = 0.0
+      diag[abs_diag < t] = 0.0
       model.layers[2].diag.assign(diag)
       test_results = model.evaluate(x_test, y_test, batch_size=128, verbose=0)
       # storing the results

@@ -54,7 +54,7 @@ def create_net(nclasses=10, dense_out=512, reg=0.01, learning_rate=0.001):
 
 nattempts = 3
 percentiles = list(range(0, 110, 10))
-reg = [0, 1e-5, 5e-4, 1e-4, 1e-3, 1e-2, 1e-1]
+reg = [0, 1e-5, 5e-4, 1e-4, 1e-3, 1e-2, 1e-1, 1]
 hyperparameters = {"epochs": [25, 50],
                    "lr": [1e-4, 1e-3]}
 
@@ -75,9 +75,10 @@ for counter, dr in enumerate(reg):
     weights = model.layers[2].weights[0].numpy()
     oshape = weights.shape
     weights = weights.reshape(-1)
-    thresholds = [np.percentile(weights, q=perc) for perc in percentiles]
+    abs_weights = weights.abs()
+    thresholds = [np.percentile(abs_weights, q=perc) for perc in percentiles]
     for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the weights"):
-      weights[weights < t] = 0.0
+      weights[abs_weights < t] = 0.0
       model.layers[2].weights[0].assign(weights.reshape(oshape))
       test_results = model.evaluate(x_test, y_test, batch_size=128, verbose=0)
       # storing the results

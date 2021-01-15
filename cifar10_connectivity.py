@@ -54,7 +54,7 @@ def create_net(nclasses=10, dense_out=512, reg=0.01, learning_rate=0.001):
 
 nattempts = 3
 percentiles = list(range(0, 110, 10))
-reg = [0, 1e-5, 5e-4, 1e-4, 1e-3, 1e-2, 1e-1]
+reg = [0, 1e-5, 5e-4, 1e-4, 1e-3, 1e-2, 1e-1, 1]
 hyperparameters = {"epochs": [25, 50],
                    "lr": [1e-4, 1e-3]}
 
