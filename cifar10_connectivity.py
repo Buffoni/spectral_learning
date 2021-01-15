@@ -73,7 +73,7 @@ for counter, dr in enumerate(reg):
     model.fit(x_train, y_train, epochs=best_params["epochs"], batch_size=128, verbose=0)
     print("  {}-th training (of {}) done in {:.3f} secs".format(attempt+1, nattempts, time()-tic))
     weights = model.layers[2].weights[0].numpy()
-    connectivity = weights.sum(axis=0)
+    connectivity = weights.abs().sum(axis=0)
     thresholds = [np.percentile(connectivity, q=perc) for perc in percentiles]
     for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the nodes"):
       weights[:, connectivity < t] = 0.0
