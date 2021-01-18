@@ -14,7 +14,7 @@ model_config = {
     'is_diag': [True],  # True means a trainable eigenvalues, False ow
     'regularize': [None],
     'is_bias': [False],  # True means a trainable bias, False ow
-    'activ': ['tanh'],  # Activation function
+    'activ': ['relu'],  # Activation function
 
     # Same parameters but for the last layer
     'last_type': 'spec',
@@ -37,12 +37,13 @@ for i in range(5):
     model_config['type'] = ['dense']
     model_config['last_type'] = 'dense'
     dense_mod = train_model(config=model_config)
-    dense_copy = dense_mod
+    dense_copy = train_model(config=model_config)
+    [dense_conn_mod, dense_acc_conn_mod] = mod_connectivity_trim(dense_copy)
     [dense_conn, dense_acc_conn] = dense_connectivity_trim(dense_mod)
-    [dense_conn_mod, dense_acc_conn_mod] = mod_connectivity_trim(dense_mod)
 
-    plt.plot(dense_conn_mod, dense_acc_conn_mod, 'ro', markersize=2, label='Spec-Conn')
-    plt.plot(dense_conn, dense_acc_conn, 'bo', markersize=2, label='Dense-Conn')
+
+    plt.plot(dense_conn_mod, dense_acc_conn_mod, 'ro', markersize=2, label='Mod Conn')
+    plt.plot(dense_conn, dense_acc_conn, 'go', markersize=2, label='Conn')
 
 handles, labels = plt.gca().get_legend_handles_labels()
 by_label = OrderedDict(zip(labels, handles))
@@ -50,5 +51,5 @@ plt.legend(by_label.values(), by_label.keys())
 plt.title('tanh-1 hid-connect_comparison')
 plt.xlabel('Active Nodes Fraction', fontsize=15)
 plt.ylabel('Test accuracy', fontsize=15)
-plt.savefig("Figure/Connect-comp.png")
+plt.savefig("Figure/ReLU_Connect-comp.png")
 plt.show()

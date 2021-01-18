@@ -1,6 +1,5 @@
 from Functions import *
 import matplotlib.pyplot as plt
-from collections import OrderedDict
 import seaborn as sb
 
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -11,12 +10,12 @@ model_config = {
     'input_shape': 784,
     'type': ['spec'],  # Types of hidden layers: 'spec' = Spectral Layer, second diag trainable, 'dense' = Dense layer
     'size': [2000],  # Size of every hidden layer
-    'is_base': [True],  # True means a trainable basis, False ow
+    'is_base': [False],  # True means a trainable basis, False ow
     'is_diag': [True],  # True means a trainable eigenvalues, False ow
-    'regularize': [None],
-    'dense_regularize' :[None],
+    'regularize': ['l1'],
+    'dense_regularize' : [tf.keras.regularizers.l1(l1=0.0005)],
     'is_bias': [False],  # True means a trainable bias, False ow
-    'activ': ['relu'],  # Activation function
+    'activ': ['tanh'],  # Activation function
 
     # Same parameters but for the last layer
     'last_type': 'spec',
@@ -27,15 +26,15 @@ model_config = {
     'last_is_bias': False,
 
     # Training Parameters
-    'batch_size': 800,
-    'epochs': 20
+    'batch_size': 500,
+    'epochs': 60
 }
 
 plt.figure(0, dpi=200)
 
 Results = {"lay": [], "percentile": [], "val_accuracy": []}
 
-for i in range(10):
+for i in range(3):
     print(f"Trial: {i + 1}\n")
 
     print('Spectral...\n')
@@ -48,7 +47,6 @@ for i in range(10):
     Results["percentile"].extend(x)
     Results["val_accuracy"].extend(y)
 
-
     print('Dense...\n')
     model_config['type'] = ['dense']
     model_config['last_type'] = 'dense'
@@ -60,13 +58,5 @@ for i in range(10):
 
 accuracy_perc_plot = sb.lineplot(x="percentile", y="val_accuracy", hue="lay", style="lay",
                                  markers=True, dashes=False, ci="sd", data=Results)
-accuracy_perc_plot.get_figure().savefig("./test/accuracy_mnist_relu.png")
-# %%
-handles, labels = plt.gca().get_legend_handles_labels()
-by_label = OrderedDict(zip(labels, handles))
-plt.legend(by_label.values(), by_label.keys())
-plt.title('1 Hidden layer Trimming-relu')
-plt.xlabel('Active Nodes Fraction', fontsize=15)
-plt.ylabel('Test accuracy', fontsize=15)
-plt.savefig("Figure/1_Hidden_Layer-relu.png")
-plt.show()
+accuracy_perc_plot.get_figure().savefig("./test/eigval_REG_tanh_mnist.png")
+

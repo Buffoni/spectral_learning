@@ -4,41 +4,21 @@ The 'model_config' file contains the structure of the network to be tested.
 The dataset loaded is MNIST
 @authors: Lorenzo Buffoni, Lorenzo Giambagli
 """
+
 import tensorflow as tf
+from tqdm import tqdm
 from SpectralLayer import Spectral
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.backend import set_value
 import numpy as np
 from numpy import multiply as mult
 import pickle as pk
+import pandas as pd
 
 # Parallel execution's stuff
 physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 tf.config.experimental.set_synchronous_execution(False)
-
-# model_config = {
-#     'input_shape': 784,
-#     'type': ['spec'],    # Types of hidden layers: 'spec' = Spectral Layer, second diag trainable, 'dense' = Dense layer
-#     'size': [2000, 2000],      # Size of every hidden layer
-#     'is_base': [True, True],   # True means a trainable basis, False ow
-#     'is_diag': [True, True],   # True means a trainable eigenvalues, False ow
-#     'regularize': [None, None],
-#     'is_bias': [False, False],  # True means a trainable bias, False ow
-#     'activ': ['tanh', 'tanh'],   # Activation function
-#
-#     # Same parameters but for the last layer
-#     'last_type': 'spec',
-#     'last_activ': 'softmax',
-#     'last_size': 10,
-#     'last_is_base': True,
-#     'last_is_diag': True,
-#     'last_is_bias': False,
-#
-#     # Training Parameters
-#     'batch_size': 800,
-#     'epochs': 20
-# }
 
 def build_feedforward():
 
@@ -61,7 +41,7 @@ def build_feedforward():
         else:
             model.add(Dense(model_config['size'][i],
                             use_bias=model_config['is_bias'][i],
-                            kernel_regularizer=model_config['regularize'][i],
+                            kernel_regularizer=model_config['dense_regularize'][i],
                             activation=model_config['activ'][i]))
 
     if model_config['last_type'] == 'spec':
@@ -92,6 +72,7 @@ def train_model(config=None, load_model=False):
     model_config = config
 
     mnist = tf.keras.datasets.mnist
+    # mnist = tf.keras.datasets.fashion_mnist
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -146,6 +127,78 @@ def train_model(config=None, load_model=False):
 
     return model
 
+def spectral_eigval_trim_SL(model):
+
+    f = open('testset.pickle', 'rb')
+    x_test, y_test = pk.load(f)
+    f.close()
+    # percentiles = list(range(0, 105, 5))
+    percentiles = list(np.arange(97.5, 100, 0.1))
+    results = {"diag_reg": [], "percentile": [], "val_accuracy": []}
+    diag = model.layers[0].diag.numpy()
+    abs_diag = np.abs(diag)
+    thresholds = [np.percentile(abs_diag, q=perc) for perc in percentiles]
+    for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the eigenvalues"):
+        diag[abs_diag < t] = 0.0
+        model.layers[0].diag.assign(diag)
+        test_results = model.evaluate(x_test, y_test, batch_size=1000, verbose=0)
+        # storing the results
+        results["percentile"].append(perc)
+        results["val_accuracy"].append(test_results[1])
+
+    return [results["percentile"], results["val_accuracy"]]
+
+
+def dense_connectivity_trim_SL(model):
+    f = open('testset.pickle', 'rb')
+    x_test, y_test = pk.load(f)
+    f.close()
+    percentiles = list(range(0, 105, 5))
+    # percentiles = list(np.arange(97, 100, 0.1))
+    weights = model.layers[0].weights[0].numpy()
+    connectivity = np.abs(weights).sum(axis=0)
+    thresholds = [np.percentile(connectivity, q=perc) for perc in percentiles]
+    results = {"percentile": [], "val_accuracy": []}
+
+    for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the nodes"):
+        weights[:, connectivity < t] = 0.0
+        model.layers[0].weights[0].assign(weights)
+        test_results = model.evaluate(x_test, y_test, batch_size=1000, verbose=0)
+        # storing the results
+        results["percentile"].append(perc)
+        results["val_accuracy"].append(test_results[1])
+
+    return [results["percentile"], results["val_accuracy"]]
+
+def autov_vec_train(config):
+    global model_config
+    model_config = config
+
+    mnist = tf.keras.datasets.mnist
+    # mnist = tf.keras.datasets.fashion_mnist
+
+    (x_train, y_train), (x_test, y_test) = mnist.load_data()
+    x_train, x_test = x_train / 255.0, x_test / 255.0
+
+    flat_train = np.reshape(x_train, [x_train.shape[0], 28 * 28])
+    flat_test = np.reshape(x_test, [x_test.shape[0], 28 * 28])
+
+    file = open('testset.pickle', 'wb')
+    tmp = [flat_test, y_test]
+    pk.dump(tmp, file)
+    file.close()
+
+    model_config["is_base"] = [False]
+    model = build_feedforward()
+    opt = tf.keras.optimizers.Adam(learning_rate=0.001)
+    model.compile(optimizer=opt,
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'], run_eagerly=False)
+
+
+    model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
+    model.evaluate(flat_test, y_test, batch_size=1000, verbose=0)
+
 def spectral_eigval_trim(model, cut_n=80):
     """
     :param model: spectral model to Trim
@@ -160,7 +213,8 @@ def spectral_eigval_trim(model, cut_n=80):
     cut_min = np.zeros([len(model.layers) - 1])
     cut_max = np.zeros([len(model.layers) - 1])
     cut = []
-    eig_n = np.array(model_config['size']).sum() / 2
+    eig_n = np.array(model_config['size']).sum()
+
 
     for i in range(0, len(model.layers) - 1):
         cut_max[i] = abs(model.layers[i].get_weights()[1]).max()
@@ -174,7 +228,6 @@ def spectral_eigval_trim(model, cut_n=80):
     for j in range(0, cut_n):
         useful_eig = 0
         for i in range(0, len(model.layers) - 1):
-        # for i in range(0, len(model.layers) - 2):
             diag_out = model.layers[i].get_weights()[1]
             diag_out[abs(diag_out) < cut[i][j]] = 0
             set_value(model.layers[i].diag, tf.constant(diag_out, dtype=tf.float32))
@@ -204,7 +257,7 @@ def dense_connectivity_trim(model, cut_n=80):
     flat_test, y_test = pk.load(f)
     f.close()
 
-    nodes_n = np.array(model_config['size']).sum() /2
+    nodes_n = np.array(model_config['size']).sum()
 
     cut_min = np.zeros([len(model.layers) - 1])
     cut_max = np.zeros([len(model.layers) - 1])
@@ -277,7 +330,7 @@ def mod_connectivity_trim(model, cut_n=80):
     flat_test, y_test = pk.load(f)
     f.close()
 
-    nodes_n = np.array(model_config['size']).sum() /2
+    nodes_n = np.array(model_config['size']).sum()
 
     cut_min = np.zeros([len(model.layers) - 1])
     cut_max = np.zeros([len(model.layers) - 1])
@@ -310,8 +363,7 @@ def mod_connectivity_trim(model, cut_n=80):
 
         model.compile(optimizer=model.optimizer,
                       loss=model.loss,
-                      metrics=['accuracy'],
-                      run_eagerly=False)
+                      metrics=['accuracy'])
 
         tested = model.evaluate(flat_test, y_test, batch_size=1000, verbose=0)
         acc_final.append(tested[1])
