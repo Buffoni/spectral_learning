@@ -58,35 +58,35 @@ reg = [0, 1e-5, 5e-4, 1e-4, 1e-3, 1e-2, 1e-1, 1]
 hyperparameters = {"epochs": [25, 50],
                    "lr": [1e-4, 1e-3]}
 
-results = {"reg": [], "percentile": [], "val_accuracy": []}
+results = {"reg": [], "percentile": [], "test_accuracy": []}
 for counter, dr in enumerate(reg):
   print("{}-th training (of {}) with diagreg = {}".format(counter+1, len(reg), dr))
   tic = time()
   model = KerasClassifier(build_fn=lambda lr: create_net(learning_rate=lr, reg=dr),
-                          epochs=10, batch_size=128, verbose=0)
+                          epochs=10, batch_size=32, verbose=1)
   model = GridSearchCV(estimator=model, param_grid=hyperparameters, n_jobs=1, cv=3, refit=False)
   best_params = model.fit(x_train, y_train).best_params_
   print("Grid Search done in {:.3f} secs".format(time()-tic))
   for attempt in range(nattempts):
     tic = time()
     model = create_net(learning_rate=best_params["lr"], reg=dr)
-    model.fit(x_train, y_train, epochs=best_params["epochs"], batch_size=128, verbose=0)
+    model.fit(x_train, y_train, epochs=best_params["epochs"], batch_size=32, verbose=0)
     print("  {}-th training (of {}) done in {:.3f} secs".format(attempt+1, nattempts, time()-tic))
     weights = model.layers[2].weights[0].numpy()
-    connectivity = np.abs(weights).sum(axis=0)
+    connectivity = np.abs(weights).sum(axis=1)
     thresholds = [np.percentile(connectivity, q=perc) for perc in percentiles]
     for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the nodes"):
-      weights[:, connectivity < t] = 0.0
+      weights[connectivity < t, :] = 0.0
       model.layers[2].weights[0].assign(weights)
-      test_results = model.evaluate(x_test, y_test, batch_size=128, verbose=0)
+      test_results = model.evaluate(x_test, y_test, batch_size=32, verbose=0)
       # storing the results
       results["reg"].append("{}".format(dr))
       results["percentile"].append(perc)
-      results["val_accuracy"].append(test_results[1])
+      results["test_accuracy"].append(test_results[1])
 
 results = pd.DataFrame(results)
 results.to_csv("./test/c_accuracy_perc_cifar10.csv", index=False)
 print(results)
-accuracy_perc_plot = sns.lineplot(x="percentile", y="val_accuracy", hue="reg", style="reg", 
+accuracy_perc_plot = sns.lineplot(x="percentile", y="test_accuracy", hue="reg", style="reg", 
                                   markers=True, dashes=False, ci="sd", data=results)
 accuracy_perc_plot.get_figure().savefig("./test/c_accuracy_perc_cifar10.png")
