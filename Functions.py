@@ -13,15 +13,13 @@ from tensorflow.keras.backend import set_value
 import numpy as np
 from numpy import multiply as mult
 import pickle as pk
-import pandas as pd
 
 # Parallel execution's stuff
 physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 tf.config.experimental.set_synchronous_execution(False)
 
-def build_feedforward():
-
+def build_feedforward(model_config):
     """
     :param config: Configuration file for your model
     :return: Model created according to 'model_config'
@@ -62,17 +60,15 @@ def build_feedforward():
                   metrics=['accuracy'], run_eagerly=False)
     return model
 
-def train_model(config=None, load_model=False):
+
+def train_model(config):
     """
     Train a configurated model according to model_config
     :return: Opens a file in append mode and write down the Test_accuracy
     """
-    # if config is not None:
-    global model_config
     model_config = config
 
     mnist = tf.keras.datasets.mnist
-    # mnist = tf.keras.datasets.fashion_mnist
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -85,45 +81,13 @@ def train_model(config=None, load_model=False):
     pk.dump(tmp, file)
     file.close()
 
-    if load_model:
-        print('Loading from previous model...\n')
-        f = open(r'C:\Users\loren\PycharmProjects\Trimming\base.p', "rb")
-        while True:
-            try:
-                to_load_phi = pk.load(f)
-            except EOFError:
-                break
-
-        f = open(r'C:\Users\loren\PycharmProjects\Trimming\diags.p', "rb")
-        while True:
-            try:
-                to_load_diag = pk.load(f)
-            except EOFError:
-                break
-
-        model = build_feedforward()
-        model.compile(optimizer=model.optimizer,
-                      loss=model.loss,
-                      metrics=['accuracy'],
-                      run_eagerly=False)
-
-        for l in range(0, len(model.layers)):
-            model.layers[l].base = tf.constant(to_load_phi[l], dtype=tf.float32)
-            model.layers[l].eigval_2 = tf.Variable(to_load_diag[l], dtype=tf.float32)
-
-            model.compile(optimizer=model.optimizer,
-                          loss=model.loss,
-                          metrics=['accuracy'],
-                          run_eagerly=False)
-    else:
-        model = build_feedforward()
-        opt = tf.keras.optimizers.Adam(learning_rate=0.001)
-        model.compile(optimizer=opt,
-                      loss='sparse_categorical_crossentropy',
-                      metrics=['accuracy'], run_eagerly=False)
+    model = build_feedforward(model_config)
+    opt = tf.keras.optimizers.Adam(learning_rate=0.001)
+    model.compile(optimizer=opt,
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'], run_eagerly=False)
 
     model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
-    model.evaluate(flat_test, y_test, batch_size=1000, verbose=0)
 
     return model
 
@@ -133,7 +97,7 @@ def spectral_eigval_trim_SL(model):
     x_test, y_test = pk.load(f)
     f.close()
     # percentiles = list(range(0, 105, 5))
-    percentiles = list(np.arange(97.5, 100, 0.1))
+    percentiles = list(np.arange(96, 100, 0.2))
     results = {"diag_reg": [], "percentile": [], "val_accuracy": []}
     diag = model.layers[0].diag.numpy()
     abs_diag = np.abs(diag)
@@ -147,7 +111,6 @@ def spectral_eigval_trim_SL(model):
         results["val_accuracy"].append(test_results[1])
 
     return [results["percentile"], results["val_accuracy"]]
-
 
 def dense_connectivity_trim_SL(model):
     f = open('testset.pickle', 'rb')
@@ -170,12 +133,88 @@ def dense_connectivity_trim_SL(model):
 
     return [results["percentile"], results["val_accuracy"]]
 
-def autov_vec_train(config):
+def val_vec_train_trim(config):
+    model_config = config
+
+    mnist = tf.keras.datasets.mnist
+
+    (x_train, y_train), (x_test, y_test) = mnist.load_data()
+    x_train, x_test = x_train / 255.0, x_test / 255.0
+
+    flat_train = np.reshape(x_train, [x_train.shape[0], 28 * 28])
+    flat_test = np.reshape(x_test, [x_test.shape[0], 28 * 28])
+
+    file = open('testset.pickle', 'wb')
+    tmp = [flat_test, y_test]
+    pk.dump(tmp, file)
+    file.close()
+
+    model = build_feedforward(model_config)
+    opt = tf.keras.optimizers.Adam(learning_rate=0.001)
+    model.compile(optimizer=opt,
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'], run_eagerly=False)
+
+    model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
+
+    percentiles = list(np.arange(96, 100, 0.2))
+    results = {"percentile": [], "val_accuracy": []}
+    diag = model.layers[0].diag.numpy()
+    abs_diag = np.abs(diag)
+    thresholds = [np.percentile(abs_diag, q=perc) for perc in percentiles]
+
+    model_config["is_base"] = [True]
+    model_config["is_diag"] = [True]
+    model_config["regularize"] = [None]
+
+    for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the eigenvalues and train vectors"):
+
+        diag[abs_diag < t] = 0.0
+        hid_size = np.count_nonzero(diag)
+
+        #Smaller Model
+        new_model = tf.keras.Sequential()
+        new_model.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
+
+        i = 0
+        new_model.add(Spectral(hid_size,
+                           is_diag_trainable=model_config['is_diag'][i],
+                           is_base_trainable=model_config['is_base'][i],
+                           diag_regularizer=model_config['regularize'][i],
+                           use_bias=model_config['is_bias'][i],
+                           activation=model_config['activ'][i]))
+
+        new_model.add(Spectral(model_config['last_size'],
+                           is_diag_trainable=model_config['last_is_diag'],
+                           is_base_trainable=model_config['last_is_base'],
+                           use_bias=model_config['last_is_bias'],
+                           activation=model_config['last_activ']))
+
+        opt = tf.keras.optimizers.Adam(learning_rate=0.001)
+        new_model.compile(optimizer=opt,
+                      loss='sparse_categorical_crossentropy',
+                      metrics=['accuracy'], run_eagerly=False)
+
+        new_model.layers[0].diag.assign(diag[diag != 0.0])
+        tmp_base = model.layers[0].base.numpy()
+        new_model.layers[0].base.assign(tmp_base[:, diag != 0.0])
+
+        new_model.layers[1].diag.assign(model.layers[1].diag)
+        tmp_base = model.layers[1].base.numpy()
+        new_model.layers[1].base.assign(tmp_base[diag != 0.0, :])
+
+        new_model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
+        test_results = new_model.evaluate(flat_test, y_test, batch_size=800, verbose=0)
+        results["percentile"].append(perc)
+        results["val_accuracy"].append(test_results[1])
+
+    return [results["percentile"], results["val_accuracy"]]
+
+def autoval_vec_train_test(config):
     global model_config
     model_config = config
 
     mnist = tf.keras.datasets.mnist
-    # mnist = tf.keras.datasets.fashion_mnist
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -189,15 +228,44 @@ def autov_vec_train(config):
     file.close()
 
     model_config["is_base"] = [False]
-    model = build_feedforward()
+    model_config["last_is_base"] = True
+    model = build_feedforward(model_config)
     opt = tf.keras.optimizers.Adam(learning_rate=0.001)
     model.compile(optimizer=opt,
                   loss='sparse_categorical_crossentropy',
                   metrics=['accuracy'], run_eagerly=False)
 
-
     model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
-    model.evaluate(flat_test, y_test, batch_size=1000, verbose=0)
+    print("\nStart acc:\n")
+    model.evaluate(flat_test, y_test, batch_size=500, verbose=2)
+
+    diag = model.layers[0].diag.numpy()
+    abs_diag = np.abs(diag)
+    thresholds = np.percentile(abs_diag, q=96)
+
+    diag[abs_diag < thresholds] = 0.0
+    print("Nodi rimasti: {}\n".format(np.count_nonzero(diag)))
+    model.layers[0].diag.assign(diag)
+
+    print("\nPost Taglio:\n")
+    model.evaluate(flat_test, y_test, batch_size=500, verbose=2)
+
+    model_config["is_base"] = [True]
+    model_config["is_diag"] = [False]
+    model_config["regularize"] = [None]
+
+    new_model = build_feedforward(model_config)
+
+    for i in range(2):
+        new_model.layers[i].diag.assign(model.layers[i].diag)
+        new_model.layers[i].base.assign(model.layers[i].base)
+
+    print("\nAccuracy post-assegnazione:\n")
+    new_model.evaluate(flat_test, y_test, batch_size=300, verbose=1)
+
+    new_model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
+    print("\nAccuracy finale:\n")
+    new_model.evaluate(flat_test, y_test, batch_size=300, verbose=1)
 
 def spectral_eigval_trim(model, cut_n=80):
     """
@@ -370,3 +438,4 @@ def mod_connectivity_trim(model, cut_n=80):
         nodes_ratio.append(nonzero / nodes_n)
 
     return np.array(nodes_ratio), np.array(acc_final)
+
