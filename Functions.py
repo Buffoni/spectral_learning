@@ -19,6 +19,8 @@ physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 tf.config.experimental.set_synchronous_execution(False)
 
+dataset = tf.keras.datasets.fashion_mnist
+
 def build_feedforward(model_config):
     """
     :param config: Configuration file for your model
@@ -60,7 +62,6 @@ def build_feedforward(model_config):
                   metrics=['accuracy'], run_eagerly=False)
     return model
 
-
 def train_model(config):
     """
     Train a configurated model according to model_config
@@ -68,7 +69,7 @@ def train_model(config):
     """
     model_config = config
 
-    mnist = tf.keras.datasets.mnist
+    mnist = dataset
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -97,7 +98,7 @@ def spectral_eigval_trim_SL(model):
     x_test, y_test = pk.load(f)
     f.close()
     # percentiles = list(range(0, 105, 5))
-    percentiles = list(np.arange(96, 100, 0.2))
+    percentiles = list(np.arange(1, 100, 5))
     results = {"diag_reg": [], "percentile": [], "val_accuracy": []}
     diag = model.layers[0].diag.numpy()
     abs_diag = np.abs(diag)
@@ -112,11 +113,12 @@ def spectral_eigval_trim_SL(model):
 
     return [results["percentile"], results["val_accuracy"]]
 
+
 def dense_connectivity_trim_SL(model):
     f = open('testset.pickle', 'rb')
     x_test, y_test = pk.load(f)
     f.close()
-    percentiles = list(range(0, 105, 5))
+    percentiles = list(np.arange(1, 100, 5))
     # percentiles = list(np.arange(97, 100, 0.1))
     weights = model.layers[0].weights[0].numpy()
     connectivity = np.abs(weights).sum(axis=0)
@@ -133,10 +135,17 @@ def dense_connectivity_trim_SL(model):
 
     return [results["percentile"], results["val_accuracy"]]
 
+def dense_pruning_SL(model):
+    f = open('testset.pickle', 'rb')
+    x_test, y_test = pk.load(f)
+    f.close()
+    percentiles = list(np.arange(1, 100, 5))
+
+
 def val_vec_train_trim(config):
     model_config = config
 
-    mnist = tf.keras.datasets.mnist
+    mnist = tf.keras.datasets.fashion_mnist
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -157,7 +166,7 @@ def val_vec_train_trim(config):
 
     model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
 
-    percentiles = list(np.arange(96, 100, 0.2))
+    percentiles = list(np.arange(1, 100, 5))
     results = {"percentile": [], "val_accuracy": []}
     diag = model.layers[0].diag.numpy()
     abs_diag = np.abs(diag)
@@ -214,7 +223,7 @@ def autoval_vec_train_test(config):
     global model_config
     model_config = config
 
-    mnist = tf.keras.datasets.mnist
+    mnist = tf.keras.datasets.fashion_mnist
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0

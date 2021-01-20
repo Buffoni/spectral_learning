@@ -16,7 +16,7 @@ model_config = {
     'regularize': ['l1'],
     'dense_regularize' : [tf.keras.regularizers.l1(l1=0.0005)],
     'is_bias': [False],  # True means a trainable bias, False ow
-    'activ': ['tanh'],  # Activation function
+    'activ': ['relu'],  # Activation function
 
     # Same parameters but for the last layer
     'last_type': 'spec',
@@ -35,7 +35,7 @@ plt.figure(0, dpi=200)
 
 Results = {"lay": [], "percentile": [], "val_accuracy": []}
 
-N = 10
+N = 5
 for i in range(N):
     print(f"Trial: {i + 1}\n")
 
@@ -69,8 +69,8 @@ for i in range(N):
 
 accuracy_perc_plot = sb.lineplot(x="percentile", y="val_accuracy", hue="lay", style="lay",
                                  markers=True, dashes=False, ci="sd", data=Results)
-accuracy_perc_plot.get_figure().savefig("./test/fminst_reg_tanh.png")
+accuracy_perc_plot.get_figure().savefig("./test/fmnist_reg_relu.png")
 plt.show()
 
-f = open("./fminst_reg_tanh.p","wb")
+f = open("./fmnist_reg_relu.p","wb")
 pk.dump(Results, f)
