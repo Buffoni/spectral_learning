@@ -49,7 +49,7 @@ def get_data():
     x_test = features_extractor.predict(x=x_test, verbose=1)
     return x_train, y_train, x_test, y_test
 
-def create_net(in_dim=1280, nclasses=10, spectral_out_dim=512, spectral_act="relu", regularizer=0.01, learning_rate=0.001):
+def create_net(in_dim, spectral_act, nclasses=10, spectral_out_dim=512, regularizer=0.01, learning_rate=0.001):
     net = tf.keras.Sequential()
     net.add(tf.keras.layers.Input(shape=(in_dim), dtype="float32"))
     net.add(Spectral(spectral_out_dim, 
@@ -83,7 +83,8 @@ def main(n_attempts=5, spectral_act="relu", batch_size=32):
         print("Grid Search done in {:.3f} secs".format(time()-tic))
         for attempt in range(n_attempts):
             print(f"  {attempt+1}-th training (of {n_attempts})")
-            model = create_net(learning_rate=best_params["lr"], regularizer=reg)
+            model = create_net(learning_rate=best_params["lr"], regularizer=reg, 
+                               in_dim=x_train.shape[1], spectral_act=spectral_act)
             model.fit(x_train, y_train, epochs=best_params["epochs"], batch_size=batch_size, verbose=1)
             diag = model.layers[0].diag.numpy()
             abs_diag = np.abs(diag)

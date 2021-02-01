@@ -2,9 +2,20 @@
 
 python=$(which python)
 
-echo "SPECTRAL"
-python -u cifar10_spectral.py
-echo "CONNECTIVITY"
-python -u cifar10_connectivity.py
-echo "WEIGHT"
-python -u cifar10_weight.py
+echo -e "SPECTRAL"
+echo -e "RELU"
+# $python -u cifar10_spectral.py --spectral_act relu
+echo -e "ELU"
+# $python -u cifar10_spectral.py --spectral_act elu
+echo -e "TANH"
+# $python -u cifar10_spectral.py --spectral_act tanh
+echo -e "\n"
+
+echo -e "CONNECTIVITY"
+echo -e "RELU"
+$python -u cifar10_connectivity.py --activation relu
+echo -e "ELU"
+$python -u cifar10_connectivity.py --activation elu
+echo -e "TANH"
+$python -u cifar10_connectivity.py --activation tanh
+echo -e "\n"
