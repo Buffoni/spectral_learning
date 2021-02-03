@@ -4,7 +4,6 @@ The 'model_config' file contains the structure of the network to be tested.
 The dataset loaded is MNIST
 @authors: Lorenzo Buffoni, Lorenzo Giambagli
 """
-
 import tensorflow as tf
 from tqdm import tqdm
 from SpectralLayer import Spectral
@@ -20,6 +19,7 @@ tf.config.experimental.set_memory_growth(physical_devices[0], True)
 tf.config.experimental.set_synchronous_execution(False)
 
 dataset = tf.keras.datasets.fashion_mnist
+perc_span = np.arange(5, 105, 5)
 
 def build_feedforward(model_config):
     """
@@ -62,7 +62,8 @@ def build_feedforward(model_config):
                   metrics=['accuracy'], run_eagerly=False)
     return model
 
-def train_model(config):
+
+def train_model(config, normalize = False):
     """
     Train a configurated model according to model_config
     :return: Opens a file in append mode and write down the Test_accuracy
@@ -73,6 +74,11 @@ def train_model(config):
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
+
+    normalize = config['normalize']
+
+    if normalize:
+        x_train, x_test = x_train-np.mean(x_train), x_test-np.mean(x_test)
 
     flat_train = np.reshape(x_train, [x_train.shape[0], 28 * 28])
     flat_test = np.reshape(x_test, [x_test.shape[0], 28 * 28])
@@ -97,8 +103,7 @@ def spectral_eigval_trim_SL(model):
     f = open('testset.pickle', 'rb')
     x_test, y_test = pk.load(f)
     f.close()
-    # percentiles = list(range(0, 105, 5))
-    percentiles = list(np.arange(1, 100, 5))
+    percentiles = list(perc_span)
     results = {"diag_reg": [], "percentile": [], "val_accuracy": []}
     diag = model.layers[0].diag.numpy()
     abs_diag = np.abs(diag)
@@ -113,12 +118,88 @@ def spectral_eigval_trim_SL(model):
 
     return [results["percentile"], results["val_accuracy"]]
 
+def spectral_encoder_SL(model):
+
+    f = open('testset.pickle', 'rb')
+    x_test, y_test = pk.load(f)
+    x_test = x_test.reshape([x_test.shape[0], 28, 28])
+    f.close()
+    percentiles = list(perc_span)
+    results = {"percentile": [], "val_loss": []}
+    diag = model.encoder.layers[1].diag.numpy()
+    abs_diag = np.abs(diag)
+    thresholds = [np.percentile(abs_diag, q=perc) for perc in percentiles]
+    for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the eigenvalues"):
+        diag[abs_diag < t] = 0.0
+        model.encoder.layers[1].diag.assign(diag)
+        test_results = model.evaluate(x_test, x_test, batch_size=1000, verbose=0)
+        # storing the results
+        results["percentile"].append(perc)
+        results["val_loss"].append(test_results)
+
+    return [results["percentile"], results["val_loss"]]
+
+def spec_relu_trimming(model):
+    f = open('testset.pickle', 'rb')
+    x_test, y_test = pk.load(f)
+    f.close()
+    base = model.layers[0].base.numpy()
+    diag = model.layers[0].diag.numpy()
+    weights = -mult(base, diag)
+    connectivity = np.sum(weights, axis=0)
+    percentiles = list(perc_span)
+    results = {"percentile": [], "val_accuracy": []}
+    thresholds = [np.percentile(abs(diag[connectivity < 0]), q=perc) for perc in percentiles]
+    T = 2000
+    ind = 1
+
+    for t, perc in tqdm(list(zip(thresholds, percentiles)[1:]), desc="  Removing the nodes"):
+        if ind == 1:
+            diag[connectivity < 0] = 0.0
+            k = np.count_nonzero(connectivity < 0)
+            model.layers[0].diag.assign(diag)
+            test_results = model.evaluate(x_test, y_test, batch_size=1000, verbose=0)
+            results["percentile"].append(100*k/T)
+            results["val_accuracy"].append(test_results[1])
+            ind = 0
+        else:
+            diag[abs(diag)<t] = 0.0
+            model.layers[0].diag.assign(diag)
+            test_results = model.evaluate(x_test, y_test, batch_size=1000, verbose=0)
+            results["percentile"].append(100 * k / T + perc*(T-k)/T)
+            results["val_accuracy"].append(test_results[1])
+
+    return [results["percentile"], results["val_accuracy"]]
+
+def spec_grad_trim(model):
+    f = open('testset.pickle', 'rb')
+    x_test, y_test = pk.load(f)
+    f.close()
+    with tf.GradientTape() as g:
+        g.watch(model.layers[0].diag)
+        loss = tf.keras.losses.SparseCategoricalCrossentropy()
+        lambda_grad = g.gradient(loss(y_test,model(x_test)), model.layers[0].diag)
+    lambda_grad = abs(lambda_grad.numpy())
+    percentiles = list(perc_span)
+    thresholds = [np.percentile(lambda_grad, q=perc) for perc in percentiles]
+    results = {"percentile": [], "val_accuracy": []}
+    diag = model.layers[0].diag.numpy()
+
+    for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the nodes"):
+        diag[lambda_grad < t] = 0.0
+        model.layers[0].diag.assign(diag)
+        test_results = model.evaluate(x_test, y_test, batch_size=1000, verbose=0)
+        # storing the results
+        results["percentile"].append(perc)
+        results["val_accuracy"].append(test_results[1])
+
+    return [results["percentile"], results["val_accuracy"]]
 
 def dense_connectivity_trim_SL(model):
     f = open('testset.pickle', 'rb')
     x_test, y_test = pk.load(f)
     f.close()
-    percentiles = list(np.arange(1, 100, 5))
+    percentiles = list(perc_span)
     # percentiles = list(np.arange(97, 100, 0.1))
     weights = model.layers[0].weights[0].numpy()
     connectivity = np.abs(weights).sum(axis=0)
@@ -135,17 +216,32 @@ def dense_connectivity_trim_SL(model):
 
     return [results["percentile"], results["val_accuracy"]]
 
-def dense_pruning_SL(model):
+def dense_encoder_trim_SL(model):
     f = open('testset.pickle', 'rb')
     x_test, y_test = pk.load(f)
+    x_test = x_test.reshape([x_test.shape[0], 28, 28])
     f.close()
-    percentiles = list(np.arange(1, 100, 5))
+    percentiles = list(perc_span)
+    # percentiles = list(np.arange(97, 100, 0.1))
+    weights = model.encoder.layers[1].weights[0].numpy()
+    connectivity = np.abs(weights).sum(axis=0)
+    thresholds = [np.percentile(connectivity, q=perc) for perc in percentiles]
+    results = {"percentile": [], "val_loss": []}
 
+    for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the nodes"):
+        weights[:, connectivity < t] = 0.0
+        model.encoder.layers[1].weights[0].assign(weights)
+        test_results = model.evaluate(x_test, x_test, batch_size=1000, verbose=0)
+        # storing the results
+        results["percentile"].append(perc)
+        results["val_loss"].append(test_results)
 
-def val_vec_train_trim(config):
+    return [results["percentile"], results["val_loss"]]
+
+def dense_retrain_SL(config):
     model_config = config
 
-    mnist = tf.keras.datasets.fashion_mnist
+    mnist = dataset
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -166,7 +262,73 @@ def val_vec_train_trim(config):
 
     model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
 
-    percentiles = list(np.arange(1, 100, 5))
+    percentiles = list(perc_span)
+    weights = model.layers[0].weights[0].numpy()
+    connectivity = np.abs(weights).sum(axis=0)
+    thresholds = [np.percentile(connectivity, q=perc) for perc in percentiles]
+    results = {"percentile": [], "val_accuracy": []}
+
+    for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the nodese and train dense net"):
+        weights[:, connectivity < t] = 0.0
+        model.layers[0].weights[0].assign(weights)
+        hid_size = np.count_nonzero( connectivity >= t)
+
+        # Smaller Model
+        new_model = tf.keras.Sequential()
+        new_model.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
+
+        i=0
+        new_model.add(Dense(hid_size,
+                        use_bias=model_config['is_bias'][i],
+                        kernel_regularizer=model_config['dense_regularize'][i],
+                        activation=model_config['activ'][i]))
+
+        new_model.add(Dense(model_config['last_size'],
+                        use_bias=model_config['last_is_bias'],
+                        activation=model_config['last_activ']))
+
+        opt = tf.keras.optimizers.Adam(learning_rate=0.001)
+        new_model.compile(optimizer=opt,
+                          loss='sparse_categorical_crossentropy',
+                          metrics=['accuracy'], run_eagerly=False)
+
+        new_model.layers[0].weights[0].assign(model.layers[0].weights[0].numpy()[:, connectivity >= t])
+        new_model.layers[1].weights[0].assign(model.layers[1].weights[0].numpy()[connectivity >= t, :])
+
+        new_model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'],
+                      epochs=model_config['epochs'])
+        test_results = new_model.evaluate(flat_test, y_test, batch_size=800, verbose=0)
+
+        results["percentile"].append(perc)
+        results["val_accuracy"].append(test_results[1])
+
+    return [results["percentile"], results["val_accuracy"]]
+
+def val_vec_train_trim(config):
+    model_config = config
+
+    mnist = dataset
+
+    (x_train, y_train), (x_test, y_test) = mnist.load_data()
+    x_train, x_test = x_train / 255.0, x_test / 255.0
+
+    flat_train = np.reshape(x_train, [x_train.shape[0], 28 * 28])
+    flat_test = np.reshape(x_test, [x_test.shape[0], 28 * 28])
+
+    file = open('testset.pickle', 'wb')
+    tmp = [flat_test, y_test]
+    pk.dump(tmp, file)
+    file.close()
+
+    model = build_feedforward(model_config)
+    opt = tf.keras.optimizers.Adam(learning_rate=0.001)
+    model.compile(optimizer=opt,
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'], run_eagerly=False)
+
+    model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
+
+    percentiles = list(perc_span)
     results = {"percentile": [], "val_accuracy": []}
     diag = model.layers[0].diag.numpy()
     abs_diag = np.abs(diag)
@@ -212,8 +374,8 @@ def val_vec_train_trim(config):
         tmp_base = model.layers[1].base.numpy()
         new_model.layers[1].base.assign(tmp_base[diag != 0.0, :])
 
-        new_model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
-        test_results = new_model.evaluate(flat_test, y_test, batch_size=800, verbose=0)
+        new_model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=20)
+        test_results = new_model.evaluate(flat_test, y_test, batch_size=1000, verbose=0)
         results["percentile"].append(perc)
         results["val_accuracy"].append(test_results[1])
 
@@ -223,7 +385,7 @@ def autoval_vec_train_test(config):
     global model_config
     model_config = config
 
-    mnist = tf.keras.datasets.fashion_mnist
+    mnist = dataset
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -314,7 +476,7 @@ def spectral_eigval_trim(model, cut_n=80):
         model.compile(optimizer=model.optimizer,
                       loss=model.loss,
                       metrics=['accuracy'],
-                      run_eagerly=True)
+                      run_eagerly=False)
 
         tested = model.evaluate(flat_test, y_test, batch_size=1000, verbose=0)
         acc_final.append(tested[1])
@@ -376,7 +538,7 @@ def dense_connectivity_trim(model, cut_n=80):
 
     return np.array(nodes_ratio), np.array(acc_final)
 
-def spectral_connectivity_trim(model):
+def spectral_connectivity_trim(model,model_config):
     dense_eq = tf.keras.Sequential()
     dense_eq.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
 
@@ -400,7 +562,7 @@ def spectral_connectivity_trim(model):
         w = - mult(base, diag)
         dense_eq.layers[i].set_weights([w])
 
-    return dense_connectivity_trim(dense_eq)
+    return dense_connectivity_trim_SL(dense_eq)
 
 def mod_connectivity_trim(model, cut_n=80):
     f = open('testset.pickle', 'rb')

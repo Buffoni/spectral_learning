@@ -16,7 +16,7 @@ model_config = {
     'regularize': [None],
     'dense_regularize' : [None],
     'is_bias': [False],  # True means a trainable bias, False ow
-    'activ': ['relu'],  # Activation function
+    'activ': ['elu'],  # Activation function
 
     # Same parameters but for the last layer
     'last_type': 'spec',
@@ -27,8 +27,9 @@ model_config = {
     'last_is_bias': False,
 
     # Training Parameters
-    'batch_size': 500,
-    'epochs': 35
+    'batch_size': 300,
+    'epochs': 50,
+    'normalize': True
 }
 
 plt.figure(0, dpi=200)
@@ -36,9 +37,18 @@ plt.figure(0, dpi=200)
 Results = {"lay": [], "percentile": [], "val_accuracy": []}
 
 N = 5
-for i in range(N):
-    print(f"Trial: {i + 1}\n")
 
+for i in range(N):
+    print('Dense...\n')
+    model_config['type'] = ['dense']
+    model_config['last_type'] = 'dense'
+    dense_mod = train_model(config=model_config)
+    [x, y] = dense_connectivity_trim_SL(dense_mod)
+    Results["lay"].extend(['Dense'] * len(x))
+    Results["percentile"].extend(x)
+    Results["val_accuracy"].extend(y)
+
+for i in range(N):
     print('Spectral...\n')
     model_config['type'] = ['spec']
     model_config['is_base'] = [True]
@@ -57,21 +67,12 @@ for i in range(N):
     Results["percentile"].extend(x)
     Results["val_accuracy"].extend(y)
 
-for i in range(N):
-    print('Dense...\n')
-    model_config['type'] = ['dense']
-    model_config['last_type'] = 'dense'
-    dense_mod = train_model(config=model_config)
-    [x, y] = dense_connectivity_trim_SL(dense_mod)
-    Results["lay"].extend(['Dense'] * len(x))
-    Results["percentile"].extend(x)
-    Results["val_accuracy"].extend(y)
-
 accuracy_perc_plot = sb.lineplot(x="percentile", y="val_accuracy", hue="lay", style="lay",
                                  markers=True, dashes=False, ci="sd", data=Results)
-accuracy_perc_plot.get_figure().savefig("./test/fmnist_relu.png")
-plt.show()
 
-f = open("./fmnist_relu.p","wb")
+accuracy_perc_plot.get_figure().savefig("./mnist/mnist_elu.png")
+plt.show()
+#%%
+f = open("./backup/fmnist_elu_N.p", "wb")
 pk.dump(Results, f)
 

@@ -27,15 +27,15 @@ model_config = {
     'last_is_bias': False,
 
     # Training Parameters
-    'batch_size': 500,
-    'epochs': 35
+    'batch_size': 200,
+    'epochs': 50
 }
 
 plt.figure(0, dpi=200)
 
 Results = {"lay": [], "percentile": [], "val_accuracy": []}
 
-N = 10
+N = 1
 for i in range(N):
     print(f"Trial: {i + 1}\n")
 
@@ -48,14 +48,24 @@ for i in range(N):
     Results["lay"].extend(['spec'] * len(x))
     Results["percentile"].extend(x)
     Results["val_accuracy"].extend(y)
+# for i in range(N):
+#     print('Dense Retrain...\n')
+#     model_config['type'] = ['dense']
+#     model_config['last_type'] = 'dense'
+#     [x, y] = dense_retrain_SL(config=model_config)
+#     Results["lay"].extend(['Dense-Retrain'] * len(x))
+#     Results["percentile"].extend(x)
+#     Results["val_accuracy"].extend(y)
 
-for i in range(N):
-    print('Spectral Val/Vec...\n')
-    model_config['is_base'] = [False]
-    [x, y] = val_vec_train_trim(config=model_config)
-    Results["lay"].extend(['Alternate'] * len(x))
-    Results["percentile"].extend(x)
-    Results["val_accuracy"].extend(y)
+# for i in range(N):
+#     print('Spectral Val/Vec...\n')
+#     model_config['type'] = ['spec']
+#     model_config['last_type'] = 'spec'
+#     model_config['is_base'] = [False]
+#     [x, y] = val_vec_train_trim(config=model_config)
+#     Results["lay"].extend(['Alternate'] * len(x))
+#     Results["percentile"].extend(x)
+#     Results["val_accuracy"].extend(y)
 
 for i in range(N):
     print('Dense...\n')
@@ -67,10 +77,11 @@ for i in range(N):
     Results["percentile"].extend(x)
     Results["val_accuracy"].extend(y)
 
+
 accuracy_perc_plot = sb.lineplot(x="percentile", y="val_accuracy", hue="lay", style="lay",
                                  markers=True, dashes=False, ci="sd", data=Results)
-accuracy_perc_plot.get_figure().savefig("./test/fminst_reg_tanh.png")
+accuracy_perc_plot.get_figure().savefig("./test/confr_reg_tanh.png")
 plt.show()
 
-f = open("./fminst_reg_tanh.p","wb")
-pk.dump(Results, f)
+# f = open("./fminst_reg_tanh.p", "wb")
+# pk.dump(Results, f)

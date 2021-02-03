@@ -16,7 +16,7 @@ model_config = {
     'regularize': [None],
     'dense_regularize' : [None],
     'is_bias': [False],  # True means a trainable bias, False ow
-    'activ': ['tanh'],  # Activation function
+    'activ': ['relu'],  # Activation function
 
     # Same parameters but for the last layer
     'last_type': 'spec',
@@ -28,7 +28,7 @@ model_config = {
 
     # Training Parameters
     'batch_size': 300,
-    'epochs': 300,
+    'epochs': 200,
     'normalize': True
 }
 
@@ -36,7 +36,7 @@ plt.figure(0, dpi=200)
 
 # Results = {"lay": [], "percentile": [], "val_accuracy": []}
 
-N = 4
+N = 3
 
 for i in range(N):
     print('Dense...\n')
@@ -49,7 +49,6 @@ for i in range(N):
     Results["val_accuracy"].extend(y)
 
 for i in range(N):
-    print(f"Trial: {i + 1}\n")
     print('Spectral...\n')
     model_config['type'] = ['spec']
     model_config['is_base'] = [True]
@@ -60,7 +59,8 @@ for i in range(N):
     Results["percentile"].extend(x)
     Results["val_accuracy"].extend(y)
 
-N=2
+N = 2
+model_config['epochs'] = 70
 for i in range(N):
     print('Spectral Val/Vec...\n')
     model_config['is_base'] = [False]
@@ -71,8 +71,10 @@ for i in range(N):
 
 accuracy_perc_plot = sb.lineplot(x="percentile", y="val_accuracy", hue="lay", style="lay",
                                  markers=True, dashes=False, ci="sd", data=Results)
-accuracy_perc_plot.get_figure().savefig("./mnist/mnist_tanh.png")
+
+accuracy_perc_plot.get_figure().savefig("./Fmnist/Fmnist_relu.png")
 plt.show()
-#%%
-f = open("./mnist_tanh_last.p","wb")
+
+f = open("./backup/mnist_relu_N.p", "wb")
 pk.dump(Results, f)
+
