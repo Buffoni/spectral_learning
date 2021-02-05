@@ -19,14 +19,20 @@ alg = {"connectivity": {"elu": ["0.01"],
                         "tanh": ["0.01"]},
        "spectral": {"elu": ["0.1"],
                     "relu": ["0.1"],
-                    "tanh": ["0.1"]}}
+                    "tanh": ["0.1"]},
+       "alternate": {"elu": ["0.01"],
+                     "relu": ["0.01"],
+                     "tanh": ["0.01"]}}
 """
 alg = {"connectivity": {"elu": ["0"],
                         "relu": ["0"],
                         "tanh": ["0"]},
        "spectral": {"elu": ["0"],
                     "relu": ["0"],
-                    "tanh": ["0"]}}
+                    "tanh": ["0"]},
+       "alternate": {"elu": ["0"],
+                     "relu": ["0"],
+                     "tanh": ["0"]}}
 
 best_df = []
 for df_path in tqdm(glob("./test/*.csv"), "Best curve"):
