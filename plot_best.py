@@ -11,7 +11,7 @@ plt.rcParams["figure.figsize"] = (20, 10)
 random_seed = 42
 np.random.seed(random_seed)
 # environment
-os.environ["XDG_RUNTIME_DIR"] = "/tmp/runtime-civitelli"
+os.environ["XDG_RUNTIME_DIR"] = "/tmp/runtime-spectral"
 
 """
 alg = {"connectivity": {"elu": ["0.01"],

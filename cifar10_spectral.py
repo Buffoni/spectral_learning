@@ -28,7 +28,7 @@ random_seed = 42
 np.random.seed(random_seed)
 tf.random.set_seed(random_seed)
 # environment
-os.environ["XDG_RUNTIME_DIR"] = "/tmp/runtime-civitelli"
+os.environ["XDG_RUNTIME_DIR"] = "/tmp/runtime-spectral"
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
 def get_data():
