@@ -22,7 +22,7 @@ config = ConfigProto()
 config.gpu_options.allow_growth = True
 session = InteractiveSession(config=config)
 # matplotlib
-plt.rcParams["figure.figsize"] = (20, 10)
+# plt.rcParams["figure.figsize"] = (20, 10)
 # reproducibility
 random_seed = 42
 np.random.seed(random_seed)

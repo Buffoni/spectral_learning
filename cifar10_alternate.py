@@ -49,17 +49,19 @@ def get_data():
     x_test = features_extractor.predict(x=x_test, verbose=1)
     return x_train, y_train, x_test, y_test
 
-def create_net(in_dim, spectral_act, nclasses=10, spectral_out_dim=512, regularizer=0.01, learning_rate=0.001):
+def create_net(in_dim, spectral_act, nclasses=10, spectral_out_dim=512, regularizer=0.01, learning_rate=0.001, is_base_trainable=True, is_diag_trainable=True):
     net = tf.keras.Sequential()
     net.add(tf.keras.layers.Input(shape=(in_dim), dtype="float32"))
-    net.add(Spectral(spectral_out_dim, 
+    net.add(Spectral(spectral_out_dim,
+                     is_base_trainable=is_base_trainable,
+                     is_diag_trainable=is_diag_trainable,
                      use_bias=False,
                      activation=spectral_act, 
                      diag_regularizer=tf.keras.regularizers.l1(l1=regularizer)))
     net.add(Spectral(nclasses,
                      use_bias=True,
-                     is_base_trainable=True,
-                     is_diag_trainable=True,
+                     is_base_trainable=is_base_trainable,
+                     is_diag_trainable=is_diag_trainable,
                      activation="softmax"))
     # net.add(tf.keras.layers.Dense(nclasses, activation="softmax"))
     net.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
@@ -81,32 +83,73 @@ def main(n_attempts=5, spectral_act="relu", batch_size=32):
         model = KerasClassifier(build_fn=lambda lr: create_net(learning_rate=lr,
                                                                regularizer=reg,
                                                                in_dim=x_train.shape[1],
-                                                               spectral_act=spectral_act),
+                                                               spectral_act=spectral_act,
+                                                               is_base_trainable=False,
+                                                               is_diag_trainable=True),
                                 epochs=25, batch_size=batch_size, verbose=0)
         model = GridSearchCV(estimator=model, param_grid=hyperparameters, n_jobs=1, cv=3, verbose=2, refit=False)
-        best_params = model.fit(x_train, y_train).best_params_
+        model = model.fit(x_train, y_train)
+        print(model.cv_results_)
+        best_params = model.best_params_
         print("Grid Search done in {:.3f} secs".format(time()-tic))
+            
         for attempt in range(n_attempts):
-            print(f"  {attempt+1}-th training (of {n_attempts})")
-            model = create_net(learning_rate=best_params["lr"], regularizer=reg, 
-                               in_dim=x_train.shape[1], spectral_act=spectral_act)
-            model.fit(x_train, y_train, epochs=best_params["epochs"], batch_size=batch_size, verbose=1)
-            diag = model.layers[0].diag.numpy()
-            abs_diag = np.abs(diag)
-            thresholds = [np.percentile(abs_diag, q=perc) for perc in percentiles]
-            for t, perc in tqdm(zip(thresholds, percentiles), total=len(thresholds), desc="  Removing the eigenvalues"):
-                diag[abs_diag < t] = 0.0
-                model.layers[0].diag.assign(diag)
+            model = create_net(learning_rate=best_params["lr"],
+                               regularizer=reg, in_dim=x_train.shape[1],
+                               spectral_act=spectral_act,
+                               is_base_trainable=False,
+                               is_diag_trainable=True)
+            # forcing the initialization
+            model.predict(tf.random.normal(shape=(batch_size, x_train.shape[1])))
+            # saving the initial parameters
+            idiag0 = model.layers[0].diag.numpy()
+            ibase0 = model.layers[0].base.numpy()
+            idiag1 = model.layers[1].diag.numpy()
+            ibase1 = model.layers[1].base.numpy()
+            ibias1 = model.layers[1].bias.numpy()
+            # fitting the model
+            model.fit(x_train, y_train, epochs=best_params["epochs"],
+                      batch_size=batch_size, verbose=1)
+            # saving the trained parameters
+            diag0 = model.layers[0].diag.numpy()
+            base0 = model.layers[0].base.numpy()
+            diag1 = model.layers[1].diag.numpy()
+            base1 = model.layers[1].base.numpy()
+            bias1 = model.layers[1].bias.numpy()
+
+            # trimming
+            abs_diag0 = np.abs(diag0)
+            thresholds = [np.percentile(abs_diag0, q=perc) for perc in percentiles]
+            for t, perc in zip(thresholds, percentiles):
+                print(f"  [{attempt+1}/{n_attempts}] Percentile = {perc}...")
+                ids = np.where(abs_diag0 >= t)[0] # winning ticket
+
+                model = create_net(learning_rate=best_params["lr"], regularizer=reg,
+                                   spectral_out_dim=ids.shape[0], in_dim=x_train.shape[1], 
+                                   spectral_act=spectral_act, is_base_trainable=True, 
+                                   is_diag_trainable=True)
+                # forcing the initialization
+                model.predict(tf.random.normal(shape=(batch_size, x_train.shape[1])))
+                # restoring the weights
+                model.layers[0].diag.assign(diag0[ids])
+                model.layers[0].base.assign(ibase0[:, ids])
+                model.layers[1].diag.assign(diag1)
+                model.layers[1].base.assign(ibase1[ids, :])
+                model.layers[1].bias.assign(bias1)
+                # model.layers[1].weights[0].assign(kernel[ids, :])
+                # model.layers[1].weights[1].assign(bias)
+                # training
+                model.fit(x_train, y_train, epochs=best_params["epochs"],
+                          batch_size=batch_size, verbose=1)
+                # evaluating
                 test_results = model.evaluate(x_test, y_test, batch_size=batch_size, verbose=0)
-                # storing the results
                 results["regularizer"].append(f"{reg}")
                 results["percentile"].append(perc)
                 results["test_accuracy"].append(test_results[1])
-
     results = pd.DataFrame(results)
     print(results)
     
-    opath = os.path.join("./test", f"spectral_abs_{spectral_act}")
+    opath = os.path.join("./test", f"alternate_abs_{spectral_act}")
     results.to_csv(f"{opath}.csv", index=False)
     sns.lineplot(x="percentile", y="test_accuracy",
                  hue="regularizer", style="regularizer",
