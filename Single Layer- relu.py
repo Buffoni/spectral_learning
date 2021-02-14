@@ -34,7 +34,7 @@ model_config = {
 
 plt.figure(0, dpi=200)
 
-# Results = {"lay": [], "percentile": [], "val_accuracy": []}
+Results = {"lay": [], "percentile": [], "val_accuracy": []}
 
 N = 3
 
