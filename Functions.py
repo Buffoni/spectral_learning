@@ -19,7 +19,7 @@ tf.config.experimental.set_memory_growth(physical_devices[0], True)
 tf.config.experimental.set_synchronous_execution(False)
 
 dataset = tf.keras.datasets.fashion_mnist
-perc_span = np.arange(5, 105, 5)
+perc_span = np.arange(95, 100, 0.2)
 
 def build_feedforward(model_config):
     """
@@ -32,14 +32,14 @@ def build_feedforward(model_config):
 
     for i in range(0, len(model_config['size'])):
         if model_config['type'][i] == 'spec':
-            model.add(Spectral(model_config['size'][i],
+            model.add(Spectral(units=model_config['size'][i],
                                is_diag_trainable=model_config['is_diag'][i],
                                is_base_trainable=model_config['is_base'][i],
                                diag_regularizer=model_config['regularize'][i],
                                use_bias=model_config['is_bias'][i],
                                activation=model_config['activ'][i]))
         else:
-            model.add(Dense(model_config['size'][i],
+            model.add(Dense(input_shape=model_config['size'][i],
                             use_bias=model_config['is_bias'][i],
                             kernel_regularizer=model_config['dense_regularize'][i],
                             activation=model_config['activ'][i]))
@@ -70,7 +70,14 @@ def train_model(config, normalize = False):
     """
     model_config = config
 
-    mnist = dataset
+    dataset = model_config['dataset']
+    if dataset == 'mnist':
+        mnist = tf.keras.datasets.mnist
+    elif dataset == 'fmnist':
+        mnist = tf.keras.datasets.fashion_mnist
+    else:
+        print("Dataset error")
+        return -1
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
@@ -99,7 +106,6 @@ def train_model(config, normalize = False):
     return model
 
 def spectral_eigval_trim_SL(model):
-
     f = open('testset.pickle', 'rb')
     x_test, y_test = pk.load(f)
     f.close()

@@ -5,6 +5,7 @@ The dataset loaded is MNIST
 @authors: Lorenzo Buffoni, Lorenzo Giambagli
 """
 import tensorflow as tf
+from tensorflow.python.keras import Sequential
 from tqdm import tqdm
 from SpectralLayer import Spectral
 from tensorflow.keras.layers import Dense
@@ -13,13 +14,13 @@ import numpy as np
 from numpy import multiply as mult
 import pickle as pk
 
-# Parallel execution's stuff
+# Parallel execution stuff
 physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 tf.config.experimental.set_synchronous_execution(False)
 
 dataset = tf.keras.datasets.fashion_mnist
-perc_span = np.arange(5, 105, 5)
+perc_span = np.arange(97, 100, 0.2)
 
 def build_feedforward(model_config):
     """
@@ -181,72 +182,6 @@ def dense_encoder_trim_SL(model):
 
     return [results["percentile"], results["val_loss"]]
 
-def dense_retrain_SL(config):
-    model_config = config
-
-    mnist = dataset
-
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-    x_train, x_test = x_train / 255.0, x_test / 255.0
-
-    flat_train = np.reshape(x_train, [x_train.shape[0], 28 * 28])
-    flat_test = np.reshape(x_test, [x_test.shape[0], 28 * 28])
-
-    file = open('testset.pickle', 'wb')
-    tmp = [flat_test, y_test]
-    pk.dump(tmp, file)
-    file.close()
-
-    model = build_feedforward(model_config)
-    opt = tf.keras.optimizers.Adam(learning_rate=0.001)
-    model.compile(optimizer=opt,
-                  loss='sparse_categorical_crossentropy',
-                  metrics=['accuracy'], run_eagerly=False)
-
-    model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
-
-    percentiles = list(perc_span)
-    weights = model.layers[0].weights[0].numpy()
-    connectivity = np.abs(weights).sum(axis=0)
-    thresholds = [np.percentile(connectivity, q=perc) for perc in percentiles]
-    results = {"percentile": [], "val_accuracy": []}
-
-    for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the nodese and train dense net"):
-        weights[:, connectivity < t] = 0.0
-        model.layers[0].weights[0].assign(weights)
-        hid_size = np.count_nonzero(connectivity >= t)
-
-        # Smaller Model
-        new_model = tf.keras.Sequential()
-        new_model.add(tf.keras.layers.Input(shape=model_config['input_shape'], dtype='float32'))
-
-        i=0
-        new_model.add(Dense(hid_size,
-                        use_bias=model_config['is_bias'][i],
-                        kernel_regularizer=model_config['dense_regularize'][i],
-                        activation=model_config['activ'][i]))
-
-        new_model.add(Dense(model_config['last_size'],
-                        use_bias=model_config['last_is_bias'],
-                        activation=model_config['last_activ']))
-
-        opt = tf.keras.optimizers.Adam(learning_rate=0.001)
-        new_model.compile(optimizer=opt,
-                          loss='sparse_categorical_crossentropy',
-                          metrics=['accuracy'], run_eagerly=False)
-
-        new_model.layers[0].weights[0].assign(model.layers[0].weights[0].numpy()[:, connectivity >= t])
-        new_model.layers[1].weights[0].assign(model.layers[1].weights[0].numpy()[connectivity >= t, :])
-
-        new_model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'],
-                      epochs=model_config['epochs'])
-        test_results = new_model.evaluate(flat_test, y_test, batch_size=800, verbose=0)
-
-        results["percentile"].append(perc)
-        results["val_accuracy"].append(test_results[1])
-
-    return [results["percentile"], results["val_accuracy"]]
-
 def spectral_alternate(config):
     model_config = config
 
@@ -364,7 +299,7 @@ def dense_alternate(config):
 
     for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="Removing nodes"):
         abs_conn[abs_conn < t] = 0.0
-        hid_size = abs_conn.shape[0]
+        hid_size = np.count_nonzero(abs_conn)
 
         # Smaller Model after Trimming
         new_model = tf.keras.Sequential()
@@ -386,9 +321,9 @@ def dense_alternate(config):
                           metrics=['accuracy'], run_eagerly=False)
 
         # Setting the smaller network
-        new_model.layers[0].set_weights(w0[:, abs_conn < t])
+        new_model.layers[0].set_weights([w0[:, abs_conn >= t], ])
 
-        new_model.layers[1].set_weights(w1)
+        new_model.layers[1].set_weights([w1[abs_conn >= t, :], ])
 
         # Train smaller network
         new_model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=30)

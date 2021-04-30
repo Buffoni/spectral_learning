@@ -16,7 +16,7 @@ model_config = {
     'regularize': ['l1'],
     'dense_regularize' : [tf.keras.regularizers.l1(l1=0.0005)],
     'is_bias': [False],  # True means a trainable bias, False ow
-    'activ': ['elu'],  # Activation function
+    'activ': ['tanh'],  # Activation function
 
     # Same parameters but for the last layer
     'last_type': 'spec',
@@ -27,15 +27,17 @@ model_config = {
     'last_is_bias': False,
 
     # Training Parameters
+    'dataset': 'fmnist',
     'batch_size': 500,
-    'epochs': 35
+    'epochs': 10,
+    'normalize' : False
 }
 
 plt.figure(0, dpi=200)
 
 Results = {"lay": [], "percentile": [], "val_accuracy": []}
 
-N = 5
+N = 2
 for i in range(N):
     print(f"Trial: {i + 1}\n")
 
@@ -48,14 +50,14 @@ for i in range(N):
     Results["lay"].extend(['spec'] * len(x))
     Results["percentile"].extend(x)
     Results["val_accuracy"].extend(y)
-
-for i in range(N):
-    print('Spectral Val/Vec...\n')
-    model_config['is_base'] = [False]
-    [x, y] = val_vec_train_trim(config=model_config)
-    Results["lay"].extend(['Alternate'] * len(x))
-    Results["percentile"].extend(x)
-    Results["val_accuracy"].extend(y)
+#%%
+# for i in range(N):
+#     print('Spectral Val/Vec...\n')
+#     model_config['is_base'] = [False]
+#     [x, y] = val_vec_train_trim(config=model_config)
+#     Results["lay"].extend(['Alternate'] * len(x))
+#     Results["percentile"].extend(x)
+#     Results["val_accuracy"].extend(y)
 
 for i in range(N):
     print('Dense...\n')
@@ -66,11 +68,17 @@ for i in range(N):
     Results["lay"].extend(['dense'] * len(x))
     Results["percentile"].extend(x)
     Results["val_accuracy"].extend(y)
-
-accuracy_perc_plot = sb.lineplot(x="percentile", y="val_accuracy", hue="lay", style="lay",
-                                 markers=True, dashes=False, ci="sd", data=Results)
+#%%
+accuracy_perc_plot = sb.lineplot(x="percentile",
+                                 y="val_accuracy",
+                                 hue="lay",
+                                 style="lay",
+                                 markers=True,
+                                 dashes=False,
+                                 ci="sd", data=Results)
 accuracy_perc_plot.get_figure().savefig("./test/fmnist_reg_elu.png")
 plt.show()
 
-f = open("./backup/fmnist_reg_elu.p","wb")
+f = open('./backup/FMNIST/fmnist_reg_'+model_config['regularize'][0]+'.p',"wb")
 pk.dump(Results, f)
+

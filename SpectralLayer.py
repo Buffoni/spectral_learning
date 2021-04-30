@@ -23,7 +23,7 @@ class Spectral(Layer):
                  activation=None,
                  is_base_trainable=True,
                  is_diag_trainable=True,
-                 use_bias=True,
+                 use_bias=False,
                  base_initializer='optimized_uniform',
                  diag_initializer='optimized_uniform',
                  bias_initializer='zeros',
@@ -82,7 +82,7 @@ class Spectral(Layer):
         # \lambda_i
         self.diag = self.add_weight(
             name='diag',
-            shape=(self.units, ),
+            shape=(self.units,),
             initializer=self.diag_initializer,
             regularizer=self.diag_regularizer,
             constraint=self.diag_constraint,
@@ -94,7 +94,7 @@ class Spectral(Layer):
         if self.use_bias:
             self.bias = self.add_weight(
                 name='bias',
-                shape=(self.units, ),
+                shape=(self.units,),
                 initializer=self.bias_initializer,
                 regularizer=self.bias_regularizer,
                 constraint=self.bias_constraint,
@@ -108,7 +108,7 @@ class Spectral(Layer):
     def call(self, inputs, **kwargs):
         return core_ops.dense(
             inputs,
-            - mul(self.diag, self.base),
+            - mul( self.base,self.diag),
             self.bias,
             self.activation,
             dtype=self._compute_dtype_object)
