@@ -46,26 +46,34 @@ def Dense_conf(size=2000,
             'activation': activation
             }
 
-
-def build_feedforward(model_config):
+def build_feedforward(model_config, multilayer=False, hidden_layers=2):
     """
     :param model_config: Guarda 'activation' e 'type'
     :return: modello compilato
     """
     model = tf.keras.Sequential()
     model.add(tf.keras.layers.Input(shape=784, dtype='float32'))
+    while True:
+        if model_config['type'] == 'Spectral':
+            model.add(Spectral(**Spectral_conf(size=model_config['hidden_size'], activation=model_config['activation'])))
+        elif model_config['type'] == 'Dense':
+            model.add(Dense(**Dense_conf(size=model_config['hidden_size'], activation=model_config['activation'])))
+        elif model_config['type'] == 'Alternate':
+            model.add(Spectral(**Spectral_conf(size=model_config['hidden_size'], activation=model_config['activation'], is_base=False)))
+        else:
+            print("\nLayer type error\n")
+            return -1
+        hidden_layers -= 1
+
+        if ((not multilayer) | hidden_layers == 0):
+            break
+
     if model_config['type'] == 'Spectral':
-        model.add(Spectral(**Spectral_conf(activation=model_config['activation'])))
         model.add(Spectral(**Spectral_conf(size=10, activation='softmax')))
     elif model_config['type'] == 'Dense':
-        model.add(Dense(**Dense_conf(activation=model_config['activation'])))
         model.add(Dense(**Dense_conf(size=10, activation='softmax')))
     elif model_config['type'] == 'Alternate':
-        model.add(Spectral(**Spectral_conf(activation=model_config['activation'], is_base=False)))
         model.add(Spectral(**Spectral_conf(size=10, activation='softmax', is_base=False)))
-    else:
-        print("\nLayer type error\n")
-        return -1
 
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=model_config['learn_rate']),
                   loss='sparse_categorical_crossentropy',
@@ -90,7 +98,7 @@ def load_dataset(name):
     return (flat_train, y_train), (flat_test, y_test)
 
 def saving_file(model_config, test_results):
-    path_name = model_config['save_path'] + '\\Results\\'
+    path_name = model_config['save_path']
     os.makedirs(path_name, exist_ok=True)
     path_file = path_name + model_config['result_file_name']
 
@@ -206,6 +214,17 @@ def train_and_trim(model_config):
     if model_config['type'] == 'Alternate':
         saving_file(model_config, alternate_trimming(model, model_config, flat_train, y_train, flat_test, y_test))
 
+
+def train_and_trim_multilayer(model_config):
+    (flat_train, y_train), (flat_test, y_test) = load_dataset(model_config['dataset'])
+    model = build_feedforward(model_config,multilayer=True,hidden_layers=model_config['hidden_layers'])
+    model.fit(flat_train, y_train, verbose=0, batch_size=model_config['batch_size'], epochs=model_config['epochs'])
+    if model_config['type'] == 'Spectral':
+        saving_file(model_config, spectral_trim_ML(model, flat_test, y_test, model_config))
+    if model_config['type'] == 'Dense':
+        saving_file(model_config, dense_trimming_ML(model, flat_test, y_test, model_config))
+
+
 def plot_based_on(dataset='MNIST',activation='tanh',fname ='result_dataframe.pk', lable_size=13, ticks_size=11, save_fig=True):
     path = find(fname, os.getcwd())
 
@@ -247,3 +266,54 @@ def plot_preprocess(dati):
         ris["val_accuracy"].extend(dati['val_accuracy'][i])
     return ris
 
+def spectral_trim_ML(model, flat_train, y_test, model_config):
+    percentiles = model_config['percentiles']
+    results = {'percentiles': [], "val_accuracy": []}
+
+    for i in range(len(model.layers) - 1):
+        if i == 0:
+            autov_list = model.layers[i].diag.numpy()
+        else:
+            autov_list = np.append(autov_list, model.layers[i].diag.numpy(), 0)
+
+    diag = [model.layers[i].diag.numpy() for i in range(len(model.layers) - 1)]
+
+    abs_diag = np.abs(autov_list)
+    thresholds = [np.percentile(abs_diag, q=perc) for perc in percentiles]
+    for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the eigenvalues"):
+        for i in range(len(model.layers) - 1):
+            diag[i][abs(diag[i]) < t] = 0.0
+            model.layers[i].diag.assign(diag[i])
+
+        test_results = model.evaluate(flat_train, y_test, batch_size=1000, verbose=0)
+        # storing the results
+        results['percentiles'].append(perc)
+        results["val_accuracy"].append(test_results[1])
+
+    return results
+
+def dense_trimming_ML(model, x_test, y_test, model_config):
+    percentiles = model_config['percentiles']
+    results = {'percentiles': [], 'val_accuracy': []}
+
+    weights = [model.layers[i].weights[0].numpy() for i in range(len(model.layers) - 1)]
+    connectivity = [np.abs(weights[i]).sum(axis=0) for i in range(len(model.layers) - 1)]
+
+    for i in range(len(model.layers) - 1):
+        if i == 0:
+            conn_list = np.abs(weights[i]).sum(axis=0)
+        else:
+            conn_list = np.append(conn_list, np.abs(weights[i]).sum(axis=0), 0)
+
+    thresholds = [np.percentile(conn_list, q=perc) for perc in percentiles]
+    for t, perc in tqdm(list(zip(thresholds, percentiles)), desc="  Removing the nodes"):
+        for i in range(len(model.layers) - 1):
+            weights[i][:, connectivity[i] < t] = 0.0
+            model.layers[i].weights[0].assign(weights[i])
+
+        test_results = model.evaluate(x_test, y_test, batch_size=1000, verbose=0)
+        # storing the results
+        results['percentiles'].append(perc)
+        results["val_accuracy"].append(test_results[1])
+
+    return results

@@ -6,15 +6,19 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 model_config = {
     'type': 'Spectral',
     'activation': 'tanh',  # Activation function
-    'percentiles': np.arange(5, 105, 5),
+    'hidden_layers': 1,
+    'hidden_size': 2000,
 
     # Training Parameters
     'dataset' : 'MNIST',
     'batch_size': 200,
     'epochs': 100,
-    'save_path': 'C:\\Users\\loren\\PycharmProjects\\Git_Trimming',
-    'result_file_name': 'test.pk',
-    'learn_rate': 0.001
+    'save_path': 'C:\\Users\\loren\\PycharmProjects\\Git_Trimming\\Results\\',
+    'result_file_name': 'results-df.pk',
+    'learn_rate': 0.001,
+
+    # Trimming parameters
+    'percentiles': np.arange(5, 105, 5)
 }
 
 activ_list = ['elu']
@@ -38,7 +42,7 @@ from Funzioni import *
 dataset_list = ['MNIST', 'Fashion-MNIST']
 activ_list = ['tanh', 'elu', 'relu']
 
-plot_based_on(dataset='Fashion-MNIST', activation='elu', fname='test.pk')
+plot_based_on(dataset='Fashion-MNIST', activation='tanh', fname='test.pk')
 #%%
 for ds in dataset_list:
     for act in activ_list:
