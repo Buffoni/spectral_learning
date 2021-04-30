@@ -11,7 +11,7 @@ model_config = {
     'hidden_layers': 2,
 
     # Training Parameters
-    'dataset' : 'MNIST',
+    'dataset' : 'Fashion-MNIST',
     'batch_size': 200,
     'epochs': 100,
     'save_path': 'C:\\Users\\loren\\PycharmProjects\\Git_Trimming\\MultiLayer_Results\\',
