@@ -129,3 +129,5 @@ dmypy.json
 .pyre/
 /Figures trimming/
 /Figure Autoencoder/
+/Figures trimming multi/
+/MultiLayer_Results/

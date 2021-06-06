@@ -42,7 +42,7 @@ from Funzioni import *
 dataset_list = ['MNIST', 'Fashion-MNIST']
 activ_list = ['tanh', 'elu', 'relu']
 
-plot_based_on(dataset='Fashion-MNIST', activation='tanh', fname='test.pk')
+plot_based_on(dataset='Fashion-MNIST', activation='tanh', fname='.pk')
 #%%
 for ds in dataset_list:
     for act in activ_list:
