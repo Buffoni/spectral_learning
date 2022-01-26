@@ -2,7 +2,13 @@ from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras import activations, initializers, regularizers, constraints
 from tensorflow.python.util.tf_export import keras_export
 from tensorflow import multiply as mul
-from tensorflow import reduce_sum
+from tensorflow import reduce_sum, matmul
+# ---  Version tensorflow 2.7 ---
+# from tensorflow.nn import bias_add
+# ---  Version tensorflow 2.3 ---
+from tensorflow.keras.backend import bias_add
+
+from numpy import eye, concatenate
 
 
 @keras_export('keras.layers.Spectral')
@@ -38,7 +44,7 @@ class Spectral(Layer):
         self.is_diag_end_trainable = is_diag_end_trainable
         self.use_bias = use_bias
 
-        # 'optimized_uniform' initializers optmized by Buffoni and Giambagli
+        # 'optimized_uniform' initializers optimized by Buffoni and Giambagli
         if base_initializer == 'optimized_uniform':
             self.base_initializer = initializers.RandomUniform(-0.02, 0.02)
         else:
@@ -77,7 +83,7 @@ class Spectral(Layer):
         )
 
         # trainable eigenvalues
-        # \lambda_i
+        # \lambda_i of the article
         self.diag_end = self.add_weight(
             name='diag_end',
             shape=(1, self.units),
@@ -88,7 +94,7 @@ class Spectral(Layer):
             trainable=self.is_diag_end_trainable
         )
 
-        # \lambda_j
+        # \lambda_j of the article
         self.diag_start = self.add_weight(
             name='diag_start',
             shape=(input_shape[-1], 1),
@@ -115,16 +121,16 @@ class Spectral(Layer):
         self.built = True
 
     def call(self, inputs, **kwargs):
-      kernel = mul(self.base, self.diag_start - self.diag_end) 
-      outputs = tf.matmul(a=inputs, b=kernel)
+        kernel = mul(self.base, self.diag_start - self.diag_end)
+        outputs = matmul(a=inputs, b=kernel)
 
-      if self.use_bias:
-        outputs = tf.nn.bias_add(outputs, self.bias)
+        if self.use_bias:
+            outputs = bias_add(outputs, self.bias)
 
-      if self.activation is not None:
-        outputs = self.activation(outputs)
+        if self.activation is not None:
+            outputs = self.activation(outputs)
 
-      return outputs
+        return outputs
 
     def direct_space(self):
         return mul(self.base, self.diag_start - self.diag_end).numpy().T
@@ -132,12 +138,12 @@ class Spectral(Layer):
     def return_base(self):
         c = self.base.shape[0]
         N = reduce_sum(self.base.shape).numpy()
-        phi = np.eye(N)
+        phi = eye(N)
         phi[c:, :c] = self.base.numpy().T
         return phi
 
     def return_diag(self):
-        d = np.concatenate([self.diag_start.numpy()[:, 0], self.diag_end.numpy()[0, :]], axis=0)
+        d = concatenate([self.diag_start.numpy()[:, 0], self.diag_end.numpy()[0, :]], axis=0)
         return d
 
     def get_config(self):
