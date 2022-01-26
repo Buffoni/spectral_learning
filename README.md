@@ -1,13 +1,14 @@
 # Spectral Layer
-This repository contains the code to reproduce some of the results in: https://www.nature.com/articles/s41467-021-21481-0
-The layer implements a linear transfer between layers representing it on the eigenvectors and eigenvalues of the network constituted by layer k and k+1, where k runs in the number of layers.
-The module ```SpectralLayer.py``` contains an implementation of the spectral layer class that can be easily embedded in every Tensorflow model.
-
-The notebook ```Spactral_Layer_example.ipynb``` contains a usage example.
+This repository contains the code to reproduce some of the results in: https://arxiv.org/pdf/2108.00940.pdf.
+Different spectral pruning techniques are implemented acting on the direct space of the connections (as a benchmark) and in the reciprocal space.
+While acting in the reciprocal space we exploit the already implemented spectral layer in the following way:
+the eigenvalues are trained and then cosidered as a proxy for the importance of every node in the network. By doing so we can prune a desired amount of nodes basing on such indicator.
+In the direct space, as a comparison, the importance of every node is based on the absolute incoming connectivity.
+In <em>multilayer_pruning.ipynb</em> the tests for MNIST and Fashion-MNIST dataset are implemented and shown whereas in ,em>cifar10*.py</em> files the same procedures are applied to the CIFAR10 dataset. For the altter case a feature extraction using MobileNetV2 is done and the pruning is done only in the last part of the network.
 
 Dependecies:
 ```
-tensorflow > 2.0
+tensorflow > 2.3
 numpy
 matplotlib
 ```
