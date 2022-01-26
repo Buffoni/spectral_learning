@@ -1,4 +1,4 @@
-# Spectral Layer
+# Spectral Pruning
 This repository contains the code to reproduce some of the results in: https://arxiv.org/pdf/2108.00940.pdf.
 Different spectral pruning techniques are implemented acting on the direct space of the connections (as a benchmark) and in the reciprocal space.
 While acting in the reciprocal space we exploit the already implemented spectral layer in the following way:
@@ -12,4 +12,7 @@ tensorflow > 2.3
 numpy
 matplotlib
 ```
+
+#### Coming Soon
+Implementation of the pruning algorithm as a tool to apply to a fully trained (with spectral layers) Neural Network.
 
