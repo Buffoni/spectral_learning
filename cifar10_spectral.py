@@ -4,40 +4,38 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import tensorflow as tf
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 from time import time
 from SpectralLayer import Spectral
 from skimage.transform import resize
-from tensorflow.linalg import matmul as tmm
-from tensorflow.compat.v1 import ConfigProto
-from tensorflow.compat.v1 import InteractiveSession
 from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
-from tensorflow.keras.metrics import SparseTopKCategoricalAccuracy
 from sklearn.model_selection import train_test_split, GridSearchCV
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 # tensorflow
-config = ConfigProto()
-config.gpu_options.allow_growth = True
-session = InteractiveSession(config=config)
-# matplotlib
-# plt.rcParams["figure.figsize"] = (20, 10)
+physical_devices = tf.config.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
+tf.config.experimental.set_synchronous_execution(False)
+
 # reproducibility
 random_seed = 42
 np.random.seed(random_seed)
 tf.random.set_seed(random_seed)
+
 # environment
 os.environ["XDG_RUNTIME_DIR"] = "/tmp/runtime-spectral"
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+start_eig_conf = {
+    'diag_start_initializer': 'optimized_uniform',
+    'is_diag_start_trainable': True
+}
+
 
 def get_data():
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     x_train, x_test = x_train.astype(np.float32), x_test.astype(np.float32)
-    # x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=0.2,
-    #                                                   stratify=y_train, random_state=random_seed)
+
     x_train = np.asarray([preprocess_input(resize(img, output_shape=[96, 96])) for img in tqdm(x_train, desc="Train")])
-    # x_val = np.asarray([preprocess_input(resize(img, output_shape=[96, 96])) for img in tqdm(x_val, desc="Val")])
     x_test = np.asarray([preprocess_input(resize(img, output_shape=[96, 96])) for img in tqdm(x_test, desc="Test")])
 
     # features extraction w/ MobileNetV2
@@ -45,27 +43,29 @@ def get_data():
                                                                                 weights="imagenet"),
                                               tf.keras.layers.GlobalMaxPool2D()])
     x_train = features_extractor.predict(x=x_train, verbose=1)
-    # x_val = features_extractor.predict(x=x_val, verbose=1)
     x_test = features_extractor.predict(x=x_test, verbose=1)
     return x_train, y_train, x_test, y_test
+
 
 def create_net(in_dim, spectral_act, nclasses=10, spectral_out_dim=512, regularizer=0.01, learning_rate=0.001):
     net = tf.keras.Sequential()
     net.add(tf.keras.layers.Input(shape=(in_dim), dtype="float32"))
-    net.add(Spectral(spectral_out_dim, 
+    net.add(Spectral(spectral_out_dim,
+                     **start_eig_conf,
                      use_bias=False,
                      activation=spectral_act, 
                      diag_regularizer=tf.keras.regularizers.l1(l1=regularizer)))
     net.add(Spectral(nclasses,
+                     **start_eig_conf,
                      use_bias=True,
                      is_base_trainable=True,
-                     is_diag_trainable=True,
+                     is_diag_end_trainable=True,
                      activation="softmax"))
-    # net.add(tf.keras.layers.Dense(nclasses, activation="softmax"))
     net.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
                 loss="sparse_categorical_crossentropy",
                 metrics=["accuracy"])
     return net
+
 
 def main(n_attempts=5, spectral_act="relu", batch_size=32):
     percentiles = list(range(0, 110, 10))
@@ -91,12 +91,12 @@ def main(n_attempts=5, spectral_act="relu", batch_size=32):
             model = create_net(learning_rate=best_params["lr"], regularizer=reg, 
                                in_dim=x_train.shape[1], spectral_act=spectral_act)
             model.fit(x_train, y_train, epochs=best_params["epochs"], batch_size=batch_size, verbose=1)
-            diag = model.layers[0].diag.numpy()
+            diag = model.layers[0].diag_end.numpy()
             abs_diag = np.abs(diag)
             thresholds = [np.percentile(abs_diag, q=perc) for perc in percentiles]
             for t, perc in tqdm(zip(thresholds, percentiles), total=len(thresholds), desc="  Removing the eigenvalues"):
                 diag[abs_diag < t] = 0.0
-                model.layers[0].diag.assign(diag)
+                model.layers[0].diag_end.assign(diag)
                 test_results = model.evaluate(x_test, y_test, batch_size=batch_size, verbose=0)
                 # storing the results
                 results["regularizer"].append(f"{reg}")
