@@ -127,6 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-# Test results
-test/
+/Figures trimming/
+/Figure Autoencoder/
+/Figures trimming multi/
+/MultiLayer_Results/

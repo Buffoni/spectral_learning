@@ -1,8 +1,19 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Implementation of a simple Spectral NN layer that can learn eigenvalues
+and eigenvectors of the associated adjacency matrix.
+
+reference: https://arxiv.org/abs/2005.14436
+
+@authors: Lorenzo Buffoni, Lorenzo Giambagli
+"""
+
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras import activations, initializers, regularizers, constraints
 from tensorflow.python.util.tf_export import keras_export
-from tensorflow import multiply as mul
 from tensorflow.python.keras.layers.ops import core as core_ops
+from tensorflow.python.ops.gen_math_ops import mul
 
 
 @keras_export('keras.layers.Spectral')
@@ -13,7 +24,7 @@ class Spectral(Layer):
                  is_base_trainable=True,
                  is_diag_trainable=True,
                  use_bias=False,
-                 base_initializer='GlorotUniform', # 'optimized_uniform',
+                 base_initializer='optimized_uniform',
                  diag_initializer='optimized_uniform',
                  bias_initializer='zeros',
                  base_regularizer=None,
@@ -36,11 +47,10 @@ class Spectral(Layer):
 
         # 'optimized_uniform' initializers optmized by Buffoni and Giambagli
         if base_initializer == 'optimized_uniform':
-            self.base_initializer = initializers.RandomUniform(-0.02, 0.02)
+            self.base_initializer = initializers.RandomUniform(-0.2, 0.2)
         else:
             self.base_initializer = initializers.get(base_initializer)
         if diag_initializer == 'optimized_uniform':
-            # self.diag_initializer = initializers.RandomUniform(-0.5, 0.5)
             self.diag_initializer = initializers.RandomUniform(-0.5, 0.5)
         else:
             self.diag_initializer = initializers.get(diag_initializer)
@@ -70,20 +80,9 @@ class Spectral(Layer):
 
         # trainable eigenvalues
         # \lambda_i
-        self.diag_end = self.add_weight(
-            name='diag_end',
-            shape=(1, self.units),
-            initializer=self.diag_initializer,
-            regularizer=self.diag_regularizer,
-            constraint=self.diag_constraint,
-            dtype=self.dtype,
-            trainable=self.is_diag_trainable
-        )
-
-        # \lambda_j
-        self.diag_start = self.add_weight(
-            name='diag_start',
-            shape=(input_shape[-1], 1),
+        self.diag = self.add_weight(
+            name='diag',
+            shape=(self.units,),
             initializer=self.diag_initializer,
             regularizer=self.diag_regularizer,
             constraint=self.diag_constraint,
@@ -109,7 +108,18 @@ class Spectral(Layer):
     def call(self, inputs, **kwargs):
         return core_ops.dense(
             inputs,
-            mul(self.base, self.diag_start - self.diag_end),
+            - mul(self.base,self.diag),
             self.bias,
             self.activation,
             dtype=self._compute_dtype_object)
+
+
+if __name__ == '__main__':
+    import numpy as np
+    import tensorflow as tf
+
+    mylayer = Spectral(10, activation='softmax')
+    test_tensor = tf.constant(np.ones((2, 794)), dtype=tf.float32)
+    out = mylayer(test_tensor)
+    print("If test succeeds output shape should be: (2, 10)")
+    print("Output shape: ", out.shape)
