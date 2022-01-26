@@ -13,6 +13,6 @@ numpy
 matplotlib
 ```
 
-#### Coming Soon
+### Coming Soon
 Implementation of the pruning algorithm as a tool to apply to a fully trained (with spectral layers) Neural Network.
 
