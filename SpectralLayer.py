@@ -3,6 +3,9 @@ from tensorflow.python.keras import activations, initializers, regularizers, con
 from tensorflow.python.util.tf_export import keras_export
 from tensorflow import multiply as mul
 from tensorflow import reduce_sum
+from tensorflow import matmul
+import tensorflow as tf
+import numpy as np
 
 
 @keras_export('keras.layers.Spectral')
@@ -116,7 +119,7 @@ class Spectral(Layer):
 
     def call(self, inputs, **kwargs):
       kernel = mul(self.base, self.diag_start - self.diag_end) 
-      outputs = tf.matmul(a=inputs, b=kernel)
+      outputs = matmul(a=inputs, b=kernel)
 
       if self.use_bias:
         outputs = tf.nn.bias_add(outputs, self.bias)
