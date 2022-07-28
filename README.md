@@ -10,7 +10,7 @@ The module ```SpectralLayer.py``` contains an implementation of the spectral lay
 
 The notebook ```Spactral_Layer_example.ipynb``` contains a usage example.
 
-Dependecies:
+Dependencies:
 ```
 tensorflow > 2.0
 numpy
